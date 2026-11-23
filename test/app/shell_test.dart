@@ -8,6 +8,8 @@ import 'package:mesk/app/shell.dart';
 import 'package:mesk/data/db.dart';
 import 'package:mesk/data/kv_repo.dart';
 import 'package:mesk/domain/models.dart';
+import 'package:mesk/features/entries/entry_form_screen.dart';
+import 'package:mesk/features/skills/skill_detail_screen.dart';
 import 'package:mesk/ui/theme.dart';
 
 import '../support/demo_data.dart';
@@ -99,11 +101,12 @@ void main() {
     t.container().read(routerProvider).push('/yetenekler/yazilim');
     await t.pumpAndSettle();
     expect(_location(t), '/yetenekler/yazilim');
-    expect(find.widgetWithText(PlaceholderScreen, 'Yetenek'), findsOneWidget);
+    expect(find.byType(SkillDetailScreen), findsOneWidget);
     expect(find.byKey(MeskShell.navKey).hitTestable(), findsNothing);
     t.container().read(routerProvider).push('/kayit/yeni?skill=okuma&prior=1');
     await t.pumpAndSettle();
     expect(_location(t), '/kayit/yeni?skill=okuma&prior=1');
+    expect(find.byType(EntryFormScreen), findsOneWidget);
   });
 
   testWidgets('nav labels fit at the largest text scale', (t) async {

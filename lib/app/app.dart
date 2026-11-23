@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../features/celebrations/celebration_host.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'router.dart';
@@ -32,7 +33,7 @@ class MeskApp extends ConsumerWidget {
           data: media.copyWith(
             textScaler: media.textScaler.clamp(maxScaleFactor: maxTextScale),
           ),
-          child: child!,
+          child: CelebrationHost(child: child!),
         );
       },
     );

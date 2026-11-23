@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../features/entries/entry_form_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/skills/skill_detail_screen.dart';
 import '../features/skills/skill_edit_screen.dart';
 import '../features/skills/skills_screen.dart';
+import '../features/skills/title_path_screen.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'shell.dart';
@@ -78,21 +81,36 @@ GoRouter buildRouter(Ref ref) {
         path: '/yetenekler/yeni',
         builder: (_, _) => const SkillEditScreen(),
       ),
-      page(
-        '/yetenekler/:id',
-        'Yetenek',
+      GoRoute(
+        path: '/yetenekler/:id',
+        builder: (_, state) =>
+            SkillDetailScreen(skillId: state.pathParameters['id']!),
         routes: [
           GoRoute(
             path: 'duzenle',
             builder: (_, state) =>
                 SkillEditScreen(skillId: state.pathParameters['id']),
           ),
-          page('unvanlar', 'Unvan yolu'),
+          GoRoute(
+            path: 'unvanlar',
+            builder: (_, state) =>
+                TitlePathScreen(skillId: state.pathParameters['id']!),
+          ),
         ],
       ),
-      // Query parameters: `skill` (skill id) and `prior` (prior experience).
-      page('/kayit/yeni', 'Yeni kayıt'),
-      page('/kayit/:entryId', 'Kayıt'),
+      // Query parameters: `skill` (skill id) and `prior=1` (prior experience).
+      GoRoute(
+        path: '/kayit/yeni',
+        builder: (_, state) => EntryFormScreen(
+          skillId: state.uri.queryParameters['skill'],
+          prior: state.uri.queryParameters['prior'] == '1',
+        ),
+      ),
+      GoRoute(
+        path: '/kayit/:entryId',
+        builder: (_, state) =>
+            EntryFormScreen(entryId: state.pathParameters['entryId']),
+      ),
       page('/aliskanlik/yeni', 'Yeni alışkanlık'),
       page('/aliskanlik/:id', 'Alışkanlık'),
       page('/hedef/:skillId', 'Hedef'),
