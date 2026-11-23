@@ -138,17 +138,31 @@ int bestStreak(Habit h, LocalDay today, HabitDayData data) {
 
 const Map<int, int> streakMilestoneBonus = {7: 5, 30: 15, 100: 50, 365: 150};
 
+/// Days [h] was completed, from its creation up to [today].
+int completionCount(Habit h, LocalDay today, HabitDayData data) {
+  var n = 0;
+  for (var d = _createdDay(h); d.compareTo(today) <= 0; d = d.addDays(1)) {
+    if (isCompletedOn(h, d, data)) n++;
+  }
+  return n;
+}
+
+/// Bonus points of every streak run of [h] that reached a milestone.
+int streakBonusPoints(Habit h, LocalDay today, HabitDayData data) {
+  var total = 0;
+  for (final run in streakRunLengths(h, today, data)) {
+    for (final e in streakMilestoneBonus.entries) {
+      if (e.key <= run) total += e.value;
+    }
+  }
+  return total;
+}
+
 int iradePoints(Iterable<Habit> habits, LocalDay today, HabitDayData data) {
   var total = 0;
   for (final h in habits) {
-    for (var d = _createdDay(h); d.compareTo(today) <= 0; d = d.addDays(1)) {
-      if (isCompletedOn(h, d, data)) total++;
-    }
-    for (final run in streakRunLengths(h, today, data)) {
-      for (final e in streakMilestoneBonus.entries) {
-        if (e.key <= run) total += e.value;
-      }
-    }
+    total +=
+        completionCount(h, today, data) + streakBonusPoints(h, today, data);
   }
   return total;
 }

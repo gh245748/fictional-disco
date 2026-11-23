@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../features/achievements/achievements_screen.dart';
+import '../features/character/character_screen.dart';
 import '../features/entries/entry_form_screen.dart';
 import '../features/focus/focus_screen.dart';
 import '../features/goals/goal_edit_screen.dart';
@@ -89,7 +91,7 @@ GoRouter buildRouter(Ref ref) {
             ],
           ),
           tab('/ag', 'Ağ', screen: GraphScreen.new),
-          tab('/karakter', 'Karakter'),
+          tab('/karakter', 'Karakter', screen: CharacterScreen.new),
         ],
       ),
       GoRoute(
@@ -140,7 +142,10 @@ GoRouter buildRouter(Ref ref) {
         builder: (_, state) =>
             GoalEditScreen(skillId: state.pathParameters['skillId']!),
       ),
-      page('/basarimlar', 'Başarımlar'),
+      GoRoute(
+        path: '/basarimlar',
+        builder: (_, _) => const AchievementsScreen(),
+      ),
       page(
         '/ayarlar',
         'Ayarlar',
