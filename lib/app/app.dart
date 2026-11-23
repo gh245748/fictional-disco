@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../features/celebrations/celebration_host.dart';
+import '../features/focus/timer_controller.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'router.dart';
@@ -9,11 +10,43 @@ import 'router.dart';
 /// Largest system text scale the layout supports (spec §5.13).
 const double maxTextScale = 1.3;
 
-class MeskApp extends ConsumerWidget {
+class MeskApp extends ConsumerStatefulWidget {
   const MeskApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MeskApp> createState() => _MeskAppState();
+}
+
+class _MeskAppState extends ConsumerState<MeskApp> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _timerResumed);
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  /// Whatever tab is open: close the phases that ended while away (which
+  /// reschedules notifications), then ask the Odak screen to review them.
+  Future<void> _timerResumed() async {
+    try {
+      await ref.read(timerControllerProvider.notifier).reconcile();
+    } on Object {
+      // The timer stays as stored; the next resume retries.
+    }
+    if (mounted) ref.read(timerCheckInProvider.notifier).request();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Loads the stored timer at launch and keeps it alive on every tab.
+    ref.listen(timerControllerProvider, (_, _) {});
     // Wait for the settings so the first route already honours onboarding.
     final ready = ref.watch(
       settingsProvider.select((s) => s.hasValue || s.hasError),

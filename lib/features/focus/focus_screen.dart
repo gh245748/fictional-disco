@@ -60,10 +60,12 @@ class FocusScreen extends ConsumerStatefulWidget {
 }
 
 class _FocusScreenState extends ConsumerState<FocusScreen> {
-  late final AppLifecycleListener _lifecycle;
   Timer? _ticker;
   int _shownSecond = 0;
   bool _checkingIn = false;
+
+  /// A check-in asked for while the tab was hidden; runs once it shows.
+  bool _checkInPending = false;
   bool _reconciling = false;
 
   /// The user's picks before starting; null means the remembered default.
@@ -77,13 +79,32 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
   void initState() {
     super.initState();
     _skillId = widget.skillId;
-    _lifecycle = AppLifecycleListener(onResume: _checkIn);
     // The display is derived from the clock; this only redraws it.
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _checkIn();
       if (mounted) _warnIfBusy(widget.skillId);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checkInPending && TickerMode.valuesOf(context).enabled) {
+      _checkInPending = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _checkIn();
+      });
+    }
+  }
+
+  /// The app came back (see `MeskApp`): review now, or once the tab shows.
+  void _requestCheckIn() {
+    if (TickerMode.valuesOf(context).enabled) {
+      _checkIn();
+    } else {
+      _checkInPending = true;
+    }
   }
 
   @override
@@ -102,7 +123,6 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
   @override
   void dispose() {
     _ticker?.cancel();
-    _lifecycle.dispose();
     super.dispose();
   }
 
@@ -189,6 +209,12 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
     _haptic();
     await _checkIn();
     if (!mounted || !_active) return;
+    // Never summarize phases nobody reviewed (the check-in failed, or another
+    // one is still asking).
+    if (_ctl.unattendedPhases().isNotEmpty) {
+      if (!_checkingIn) _say('Zamanlayıcı güncellenemedi, tekrar dene.');
+      return;
+    }
     final outcome = await showSessionSummarySheet(context);
     if (!mounted) return;
     if (outcome == SummaryOutcome.tooShort) _say(tooShortMessage);
@@ -224,6 +250,7 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(timerCheckInProvider, (_, _) => _requestCheckIn());
     final timer = ref.watch(timerControllerProvider);
     final settings = ref.watch(settingsProvider).value;
     final skills = ref.watch(skillsProvider).value;

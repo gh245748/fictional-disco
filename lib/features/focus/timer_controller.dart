@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/db.dart';
+import '../../data/entries_repo.dart';
 import '../../data/kv_repo.dart';
 import '../../data/log_pipeline.dart';
 import '../../data/presets_repo.dart';
@@ -35,7 +36,7 @@ class TimerController extends Notifier<TimerState> {
   late LogPipeline _pipeline;
   Future<void> _queue = Future.value();
 
-  KvRepo get _kv => KvRepo(_db);
+  late KvRepo _kv;
 
   @override
   TimerState build() {
@@ -43,6 +44,7 @@ class TimerController extends Notifier<TimerState> {
     _clock = ref.watch(clockProvider);
     _notifications = ref.watch(notificationsProvider);
     _pipeline = ref.watch(pipelineProvider);
+    _kv = ref.watch(timerStoreProvider);
     _queue = Future.value();
     // Load the stored session (it survives app kills). A failure leaves the
     // timer idle until the next reconcile.
@@ -162,7 +164,8 @@ class TimerController extends Notifier<TimerState> {
   /// Ends the session and saves it as one entry for [skillId] (default: the
   /// session's skill). Returns null, saving nothing, when the session is
   /// shorter than a minute (§5.7); the session ends either way. Throws
-  /// [StateError] while idle. If saving fails the session stays.
+  /// [StateError] while idle. If saving fails the session stays, and a
+  /// retry never saves the session twice.
   Future<PipelineResult?> finishAndSave({
     String? skillId,
     int? trimToSeconds,
@@ -174,8 +177,13 @@ class TimerController extends Notifier<TimerState> {
       throw StateError('No timer session to finish');
     }
     final summary = TimerMachine.finish(s, _now, trimToSeconds: trimToSeconds);
+    // One id per session: a retry after a failed reset finds the entry it
+    // already saved instead of adding the hours twice.
+    final entryId = 'timer-${summary.startedAt.microsecondsSinceEpoch}';
     PipelineResult? result;
-    if (!summary.tooShort) {
+    if (!summary.tooShort && await EntriesRepo(_db).get(entryId) != null) {
+      result = const PipelineResult([]);
+    } else if (!summary.tooShort) {
       final text = note?.trim();
       // After a backwards clock jump `now` can precede the start; keep the
       // entry consistent (it never spans less than its work time).
@@ -184,7 +192,7 @@ class TimerController extends Notifier<TimerState> {
       );
       result = await _pipeline.saveEntry(
         TimeEntry(
-          id: newId(),
+          id: entryId,
           skillId: skillId ?? summary.skillId,
           startedAt: summary.startedAt,
           endedAt: summary.endedAt.isBefore(minEnd) ? minEnd : summary.endedAt,
@@ -252,6 +260,24 @@ class TimerController extends Notifier<TimerState> {
     );
   }
 }
+
+/// Where the controller keeps the timer and the remembered skill and preset.
+final timerStoreProvider = Provider<KvRepo>(
+  (ref) => KvRepo(ref.watch(dbProvider)),
+);
+
+/// Counts requests to review the timer after the app came back; the Odak
+/// screen answers each with its check-in (the unattended sheet).
+class TimerCheckIns extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void request() => state++;
+}
+
+final timerCheckInProvider = NotifierProvider<TimerCheckIns, int>(
+  TimerCheckIns.new,
+);
 
 final timerControllerProvider = NotifierProvider<TimerController, TimerState>(
   TimerController.new,

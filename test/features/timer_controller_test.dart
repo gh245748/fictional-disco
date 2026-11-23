@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sembast/sembast.dart' show DatabaseClient;
 import 'package:mesk/data/db.dart';
 import 'package:mesk/data/entries_repo.dart';
 import 'package:mesk/data/kv_repo.dart';
@@ -73,6 +74,23 @@ class _BrokenNotifications implements NotificationService {
   ) async => _fail();
 }
 
+/// Fails the first [failures] plain writes of an idle timer (a session
+/// reset after saving), like a crash between the two writes.
+class _FlakyKv extends KvRepo {
+  _FlakyKv(super.db, {this.failures = 1});
+
+  int failures;
+
+  @override
+  Future<void> saveTimer(TimerState s, {DatabaseClient? txn}) async {
+    if (s.status == TimerStatus.idle && txn == null && failures > 0) {
+      failures--;
+      throw StateError('disk full');
+    }
+    await super.saveTimer(s, txn: txn);
+  }
+}
+
 class _Env {
   _Env(this.container, this.db, this.clock);
 
@@ -90,12 +108,18 @@ class _Env {
   ];
 }
 
-Future<_Env> _setup(NotificationService notifications) async {
+Future<_Env> _setup(
+  NotificationService notifications, {
+  KvRepo Function(MeskDb db)? store,
+}) async {
   final db = await MeskDb.openMemory();
   await seedDemo(db);
   final clock = demoClock();
   final container = ProviderContainer(
-    overrides: appOverrides(db, clock, notifications: notifications),
+    overrides: [
+      ...appOverrides(db, clock, notifications: notifications),
+      if (store != null) timerStoreProvider.overrideWithValue(store(db)),
+    ],
   );
   addTearDown(() async {
     container.dispose();
@@ -222,6 +246,23 @@ void main() {
     expect(env.state.status, TimerStatus.idle);
     expect((await KvRepo(env.db).timer()).status, TimerStatus.idle);
     expect(notes.calls.last, 'cancelTimer');
+  });
+
+  test('retry after a failed reset saves the session once', () async {
+    final env = await _setup(FakeNotificationService(), store: _FlakyKv.new);
+    await env.ctl.start(mode: TimerMode.free, skillId: 'okuma');
+    env.clock.advance(const Duration(minutes: 40));
+    // The entry is written, then resetting the timer fails.
+    await expectLater(env.ctl.finishAndSave(), throwsStateError);
+    expect(await env.newEntries('okuma'), hasLength(1));
+    expect(env.state.status, TimerStatus.running);
+
+    env.clock.advance(const Duration(minutes: 1));
+    expect(await env.ctl.finishAndSave(), isNotNull);
+    final saved = (await env.newEntries('okuma')).single;
+    expect(saved.seconds, 40 * 60);
+    expect(env.state.status, TimerStatus.idle);
+    expect((await KvRepo(env.db).timer()).status, TimerStatus.idle);
   });
 
   test('free session saves to the chosen skill with trim', () async {

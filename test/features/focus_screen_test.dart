@@ -313,6 +313,88 @@ void main() {
     );
   });
 
+  testWidgets('Bitir reviews unattended phases before the summary', (t) async {
+    final db = await openTestDb(
+      t,
+      seed: (db) async {
+        await seedDemo(db);
+        await PresetsRepo(db).put(_autoAll);
+      },
+    );
+    final clock = demoClock();
+    await pumpMeskApp(t, db, '/odak', clock: clock);
+    await tapVisible(t, find.text('Otomatik'));
+    await tapVisible(t, find.text('Başlat'));
+    // The screen stays open; the ticker only stores the passing phases.
+    await _wait(t, clock, const Duration(minutes: 90));
+    expect(find.textContaining('Sen yokken'), findsNothing);
+
+    await tapVisible(t, find.text('Bitir'));
+    expect(find.textContaining('Sen yokken 2 çalışma'), findsOneWidget);
+    expect(find.text('Oturum özeti'), findsNothing);
+    await tapVisible(t, find.text('Tamam'));
+    expect(find.text('Oturum özeti'), findsOneWidget);
+    // Only the attended first phase counts.
+    expect(find.text('25 dk'), findsOneWidget);
+  });
+
+  testWidgets('Bitir does not summarize when the check-in fails', (t) async {
+    final db = await openTestDb(
+      t,
+      seed: (db) async {
+        await seedDemo(db);
+        await PresetsRepo(db).put(_autoAll);
+      },
+    );
+    final clock = demoClock();
+    await pumpMeskApp(t, db, '/odak', clock: clock);
+    await tapVisible(t, find.text('Otomatik'));
+    await tapVisible(t, find.text('Başlat'));
+    await _wait(t, clock, const Duration(minutes: 90));
+    // With the database gone the check-in fails before the sheet opens.
+    final ctl = t.container().read(timerControllerProvider.notifier);
+    expect(ctl.unattendedPhases(), hasLength(2));
+    await t.runAsync(() => db.close());
+
+    await tapVisible(t, find.text('Bitir'));
+    expect(find.text('Oturum özeti'), findsNothing);
+  });
+
+  testWidgets('app resume reconciles the timer with Odak never opened', (
+    t,
+  ) async {
+    final db = await openTestDb(t);
+    final clock = demoClock();
+    await pumpMeskApp(t, db, '/bugun', clock: clock);
+    await t.runAsync(
+      () => KvRepo(db).saveTimer(
+        TimerMachine.start(
+          mode: TimerMode.pomodoro,
+          skillId: 'okuma',
+          preset: TimerPreset.builtIns.first,
+          now: clock.utc,
+        ),
+      ),
+    );
+    clock.advance(const Duration(minutes: 31));
+    for (final s in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      t.binding.handleAppLifecycleStateChanged(s);
+    }
+    await t.pumpAndSettle();
+    expect(find.byType(FocusScreen), findsNothing);
+    final s = await _storedTimer(t, db);
+    expect(s.status, TimerStatus.waiting);
+    expect(s.completedWork, hasLength(1));
+    expect(t.container().read(timerControllerProvider), s);
+  });
+
   testWidgets('preset validation messages', (t) async {
     final db = await openTestDb(t);
     await pumpMeskApp(t, db, '/ayarlar/setler');
