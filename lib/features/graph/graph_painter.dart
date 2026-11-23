@@ -4,7 +4,6 @@ import 'package:flutter/semantics.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/views.dart';
-import '../../domain/graph_layout.dart';
 import '../../domain/level_curve.dart';
 import '../../ui/theme.dart';
 import 'graph_controller.dart';
@@ -127,7 +126,7 @@ class GraphPainter extends CustomPainter {
   void _paintNode(Canvas canvas, SkillView v) {
     final id = v.skill.id;
     final c = controller.canvasOf(id);
-    final r = nodeDiameter(v.level) / 2;
+    final r = controller.radiusOf(id);
     final opacity = controller.opacityOf(id);
     final isSelected = id == controller.selectedId;
 
@@ -221,7 +220,7 @@ class GraphPainter extends CustomPainter {
             key: ValueKey(v.skill.id),
             rect: Rect.fromCircle(
               center: controller.canvasOf(v.skill.id),
-              radius: math.max(nodeDiameter(v.level) / 2, 22),
+              radius: math.max(controller.radiusOf(v.skill.id), 22),
             ),
             properties: SemanticsProperties(
               label: '${v.skill.name}, seviye ${v.level}',

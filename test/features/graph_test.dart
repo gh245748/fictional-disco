@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show PictureRecorder;
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +19,7 @@ import 'package:mesk/domain/stats.dart';
 import 'package:mesk/domain/titles.dart';
 import 'package:mesk/domain/xp.dart';
 import 'package:mesk/features/graph/graph_controller.dart';
+import 'package:mesk/features/graph/graph_painter.dart';
 import 'package:mesk/features/graph/graph_screen.dart';
 import 'package:mesk/ui/widgets/mesk_card.dart';
 
@@ -359,11 +363,73 @@ void main() {
     });
 
     test('bonus minutes per hour', () {
-      expect(bonusMinutesLabel(1000), '6 dk');
-      expect(bonusMinutesLabel(1100), '6,6 dk');
-      expect(bonusMinutesLabel(2500), '15 dk');
-      expect(bonusMinutesLabel(0), '0 dk');
+      // A no-break space keeps "+6 dk" on one line.
+      expect(bonusMinutesLabel(1000), '6\u00a0dk');
+      expect(bonusMinutesLabel(1100), '6,6\u00a0dk');
+      expect(bonusMinutesLabel(2500), '15\u00a0dk');
+      expect(bonusMinutesLabel(0), '0\u00a0dk');
     });
+  });
+
+  test('painting 150 nodes and 200 links stays fast', () {
+    final rng = math.Random(5);
+    final views = [
+      for (var i = 0; i < 150; i++)
+        _view(
+          Skill(
+            id: 'n$i',
+            name: 'Yetenek $i',
+            primary: skillStats[i % skillStats.length],
+            createdAt: DateTime.utc(2026),
+          ),
+          1 + rng.nextInt(99),
+          tier: i % 50 == 0 ? HiddenTier.values[(i ~/ 50) % 3] : null,
+        ),
+    ];
+    final links = [
+      for (var i = 0; i < 200; i++)
+        SkillLink(
+          id: 'l$i',
+          a: 'n${rng.nextInt(150)}',
+          b: 'n${rng.nextInt(150)}',
+          createdAt: DateTime.utc(2026),
+        ),
+    ];
+    final c = _controller()..setData(views, links);
+    c.settle();
+    c.select('n7');
+    final labels = GraphLabels();
+    addTearDown(labels.dispose);
+    final painter = GraphPainter(
+      controller: c,
+      pulse: const AlwaysStoppedAnimation(0.5),
+      labels: labels,
+      textScaler: TextScaler.noScaling,
+      onNodeTap: (_) {},
+      onNodeLongPress: (_) {},
+    );
+    void frame() {
+      final recorder = PictureRecorder();
+      painter.paint(Canvas(recorder), const Size(390, 700));
+      recorder.endRecording().dispose();
+    }
+
+    for (var i = 0; i < 5; i++) {
+      frame(); // lays out the labels once
+    }
+    const frames = 60;
+    final sw = Stopwatch()..start();
+    for (var i = 0; i < frames; i++) {
+      frame();
+    }
+    sw.stop();
+    final avgMs = sw.elapsedMicroseconds / 1000 / frames;
+    // ignore: avoid_print
+    print(
+      'avg graph paint (150 nodes, 200 links): '
+      '${avgMs.toStringAsFixed(3)} ms',
+    );
+    expect(avgMs, lessThan(4));
   });
 
   group('GraphScreen', () {
@@ -392,7 +458,7 @@ void main() {
       expect(find.text('Bağlı: İngilizce · Okuma · Satranç'), findsOneWidget);
       expect(
         find.text(
-          'Burada geçen her saat, bağlı yeteneklerin her birine +6 dk '
+          'Burada geçen her saat, bağlı yeteneklerin her birine +6\u00a0dk '
           'kazandırır.',
         ),
         findsOneWidget,
@@ -494,6 +560,30 @@ void main() {
       expect(currentLocation(t), '/odak?skill=gitar');
     });
 
+    testWidgets('a long press on empty space is left to the viewer', (t) async {
+      final db = await openTestDb(t);
+      await _openGraph(t, db);
+      final canvas = t.getRect(find.byKey(GraphScreen.canvasKey));
+      final start = canvas.topLeft + const Offset(6, 6);
+      expect(_screenController(t).nodeAt(start - canvas.topLeft), isNull);
+      final viewer = t.widget<InteractiveViewer>(
+        find.byType(InteractiveViewer),
+      );
+      final gesture = await t.startGesture(start);
+      await t.pump(const Duration(milliseconds: 700)); // past long-press
+      for (var i = 0; i < 8; i++) {
+        await gesture.moveBy(const Offset(10, 10));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await t.pumpAndSettle();
+      expect(find.text('Başlat'), findsNothing);
+      // The press still pans the view.
+      final moved = viewer.transformationController!.value.getTranslation();
+      expect(moved.x, greaterThan(20));
+      expect(moved.y, greaterThan(20));
+    });
+
     testWidgets('bonus copy follows the bonus rate', (t) async {
       final db = await openTestDb(
         t,
@@ -509,7 +599,7 @@ void main() {
       expect(find.textContaining('bağ bonusu %15'), findsOneWidget);
       await t.tapAt(_nodeCenter(t, 'okuma'));
       await t.pumpAndSettle();
-      expect(find.textContaining('+9 dk kazandırır.'), findsOneWidget);
+      expect(find.textContaining('+9\u00a0dk kazandırır.'), findsOneWidget);
     });
 
     testWidgets('header, chips and card fit at text scale 1.3', (t) async {

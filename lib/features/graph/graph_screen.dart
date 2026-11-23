@@ -41,23 +41,12 @@ class GraphScreenState extends ConsumerState<GraphScreen>
   static const double _cardReserve = 136;
 
   late final MeskDb _db;
-  late final GraphController _controller = GraphController(
-    savePositions: _savePositions,
-  );
-  late final Ticker _ticker = createTicker((_) {
-    if (!_controller.tick()) {
-      _ticker.stop();
-      // Refresh the node semantics at their resting places.
-      if (mounted) setState(() {});
-    }
-  });
+  late final GraphController _controller;
+  late final Ticker _ticker;
 
-  /// The Efsane glow; runs only while such a skill is shown (and, through
-  /// [TickerMode], only while this tab is on screen).
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 2),
-  );
+  /// The Efsane glow; runs only while such a skill is shown in the graph
+  /// (and, through [TickerMode], only while this tab is on screen).
+  late final AnimationController _pulse;
   final _transform = TransformationController();
   final _labels = GraphLabels();
 
@@ -72,6 +61,21 @@ class GraphScreenState extends ConsumerState<GraphScreen>
     super.initState();
     // Read now: the last save may run while the screen is disposed.
     _db = ref.read(dbProvider);
+    _controller = GraphController(savePositions: _savePositions);
+    // Created here, not lazily: dispose must never create a ticker.
+    _ticker = createTicker(_onTick);
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  void _onTick(Duration _) {
+    if (!_controller.tick()) {
+      _ticker.stop();
+      // Refresh the node semantics at their resting places.
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -102,8 +106,9 @@ class GraphScreenState extends ConsumerState<GraphScreen>
     if (_controller.running && !_ticker.isActive) _ticker.start();
   }
 
-  void _syncPulse() {
-    final legend = _controller.nodes.any((v) => v.tier == HiddenTier.efsane);
+  void _syncPulse({required bool hasGraph}) {
+    final legend =
+        hasGraph && _controller.nodes.any((v) => v.tier == HiddenTier.efsane);
     if (legend && !_pulse.isAnimating) {
       _pulse.repeat();
     } else if (!legend && _pulse.isAnimating) {
@@ -175,7 +180,7 @@ class GraphScreenState extends ConsumerState<GraphScreen>
     final nodes = _controller.nodes;
     final hasGraph = nodes.length >= 2;
     if (hasGraph) _ensureTicking();
-    _syncPulse();
+    _syncPulse(hasGraph: hasGraph);
 
     return Scaffold(
       body: SafeArea(
@@ -233,11 +238,14 @@ class GraphScreenState extends ConsumerState<GraphScreen>
                           (r) =>
                               r.onTapUp = (d) => _select(_hit(d.localPosition)),
                         ),
-                    LongPressGestureRecognizer:
+                    _NodeLongPressRecognizer:
                         GestureRecognizerFactoryWithHandlers<
-                          LongPressGestureRecognizer
+                          _NodeLongPressRecognizer
                         >(
-                          () => LongPressGestureRecognizer(debugOwner: this),
+                          () => _NodeLongPressRecognizer(
+                            hit: (p) => _hit(p) != null,
+                            debugOwner: this,
+                          ),
                           (r) => r.onLongPressStart = (d) {
                             final id = _hit(d.localPosition);
                             if (id != null) _openActions(id);
@@ -259,16 +267,20 @@ class GraphScreenState extends ConsumerState<GraphScreen>
                             ..onCancel = _onDragEnd,
                         ),
                   },
-                  child: CustomPaint(
-                    painter: GraphPainter(
-                      controller: _controller,
-                      pulse: _pulse,
-                      labels: _labels,
-                      textScaler: textScaler,
-                      onNodeTap: _select,
-                      onNodeLongPress: _openActions,
+                  // The graph repaints every frame while it moves or pulses;
+                  // keep that off the rest of the screen.
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: GraphPainter(
+                        controller: _controller,
+                        pulse: _pulse,
+                        labels: _labels,
+                        textScaler: textScaler,
+                        onNodeTap: _select,
+                        onNodeLongPress: _openActions,
+                      ),
+                      size: size,
                     ),
-                    size: size,
                   ),
                 ),
               ),
@@ -310,6 +322,18 @@ class _NodeDragRecognizer extends PanGestureRecognizer {
   ) =>
       globalDistanceMoved.abs() >
       computeHitSlop(pointerDeviceKind, gestureSettings);
+}
+
+/// A long press that only starts on a node; elsewhere the press is left to
+/// the viewer.
+class _NodeLongPressRecognizer extends LongPressGestureRecognizer {
+  _NodeLongPressRecognizer({required this.hit, super.debugOwner});
+
+  final bool Function(Offset localPosition) hit;
+
+  @override
+  bool isPointerAllowed(PointerDownEvent event) =>
+      hit(event.localPosition) && super.isPointerAllowed(event);
 }
 
 class _Header extends StatelessWidget {

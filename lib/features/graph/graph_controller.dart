@@ -26,7 +26,8 @@ const double graphDimmedOpacity = 0.3;
 String bonusMinutesLabel(int rateBp) {
   final tenths = (rateBp * 6 / 100).round(); // bp·60/10000 min, in tenths
   final whole = tenths ~/ 10, frac = tenths % 10;
-  return frac == 0 ? '$whole dk' : '$whole,$frac dk';
+  // A no-break space keeps "+6 dk" on one line.
+  return frac == 0 ? '$whole\u00a0dk' : '$whole,$frac\u00a0dk';
 }
 
 /// Maps layout coordinates onto the canvas: `canvas = origin + graph·scale`.
@@ -86,6 +87,13 @@ class GraphController extends ChangeNotifier {
   Map<String, double> _labelHalfWidths = const {};
   GraphViewport? _viewport;
 
+  // Caches refreshed only when positions, sizes, the frame or the view
+  // change, so painting and hit-testing never copy the layout.
+  Map<String, (double, double)> _positions = const {};
+  Map<String, double> _radius = const {};
+  Map<String, Offset> _canvas = const {};
+  GraphViewport? _target;
+
   String? _selectedId;
   Stat? _filter;
   String? _draggingId;
@@ -98,7 +106,7 @@ class GraphController extends ChangeNotifier {
   /// Links between shown skills, each once.
   List<(String, String)> get edges => _edges;
 
-  Map<String, (double, double)> get positions => _layout?.positions ?? const {};
+  Map<String, (double, double)> get positions => _positions;
 
   /// Whether [tick] still has work: the simulation runs or the view is
   /// still moving to fit the graph.
@@ -155,6 +163,7 @@ class GraphController extends ChangeNotifier {
     }
     if (!byId.containsKey(_selectedId)) _selectedId = null;
     if (!byId.containsKey(_draggingId)) _draggingId = null;
+    _radius = {for (final v in shown) v.skill.id: nodeDiameter(v.level) / 2};
     final opening = _layout == null;
     final relink = topology != _topology;
     if (!relink && sizes == _sizes) return;
@@ -163,7 +172,7 @@ class GraphController extends ChangeNotifier {
     _sizes = sizes;
     final current = positions;
     final layout = _layout = GraphLayout(
-      radii: {for (final v in shown) v.skill.id: nodeDiameter(v.level) / 2},
+      radii: _radius,
       edges: edges,
       initial: {
         for (final v in shown)
@@ -197,7 +206,9 @@ class GraphController extends ChangeNotifier {
       _simulating = false;
       if (_draggingId == null) _scheduleSave();
     }
-    if (opening) _viewport = _fit();
+    _syncPositions();
+    if (opening) _viewport = _target;
+    _syncCanvas();
   }
 
   /// The drawable area of the canvas and the half widths of node labels,
@@ -206,7 +217,22 @@ class GraphController extends ChangeNotifier {
     final first = _frame == Rect.zero;
     _frame = frame;
     _labelHalfWidths = labelHalfWidths;
-    if (first || !running) _viewport = _fit();
+    _target = _fit();
+    if (first || !running) _viewport = _target;
+    _syncCanvas();
+  }
+
+  void _syncPositions() {
+    _positions = _layout?.positions ?? const {};
+    _target = _fit();
+  }
+
+  void _syncCanvas() {
+    final v = viewport;
+    _canvas = {
+      for (final MapEntry(key: id, value: p) in _positions.entries)
+        id: v.toCanvas(p),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -221,8 +247,12 @@ class GraphController extends ChangeNotifier {
 
   /// Advances one frame. Returns whether more frames are needed.
   bool tick() {
-    if (_simulating) _step(stepsPerTick);
+    if (_simulating) {
+      _step(stepsPerTick);
+      _syncPositions();
+    }
     if (_draggingId == null) _moveViewport();
+    _syncCanvas();
     notifyListeners();
     return running;
   }
@@ -232,7 +262,9 @@ class GraphController extends ChangeNotifier {
     while (_simulating) {
       _step(maxSteps);
     }
-    if (_draggingId == null) _viewport = _fit();
+    _syncPositions();
+    if (_draggingId == null) _viewport = _target;
+    _syncCanvas();
     notifyListeners();
   }
 
@@ -292,20 +324,19 @@ class GraphController extends ChangeNotifier {
   // -------------------------------------------------------------------------
   // Canvas geometry
 
-  Offset canvasOf(String id) {
-    final p = positions[id];
-    return p == null ? viewport.origin : viewport.toCanvas(p);
-  }
+  Offset canvasOf(String id) => _canvas[id] ?? viewport.origin;
+
+  /// Radius of the node of [id] (0 when it is not shown).
+  double radiusOf(String id) => _radius[id] ?? 0;
 
   /// The node under [canvasPoint]: the nearest one whose touch target, at
   /// least [minRadius] (22 px = a 44 px target at zoom 1), contains it.
   String? nodeAt(Offset canvasPoint, {double minRadius = 22}) {
     String? best;
     var bestDistance = double.infinity;
-    for (final v in _nodes) {
-      final id = v.skill.id;
-      final d = (canvasOf(id) - canvasPoint).distance;
-      final reach = math.max(nodeDiameter(v.level) / 2, minRadius);
+    for (final MapEntry(key: id, value: c) in _canvas.entries) {
+      final d = (c - canvasPoint).distance;
+      final reach = math.max(_radius[id] ?? 0, minRadius);
       if (d <= reach && d < bestDistance) {
         best = id;
         bestDistance = d;
@@ -317,19 +348,18 @@ class GraphController extends ChangeNotifier {
   /// The view that fits every node, its label included, into the frame at
   /// a position scale of at most 1.
   GraphViewport _fit() {
-    final p = positions;
+    final p = _positions;
     if (p.isEmpty || _frame.isEmpty) return GraphViewport(_frame.center, 1);
     final items = [
-      for (final v in _nodes)
-        if (p[v.skill.id] case final pos?)
-          (
-            pos: pos,
-            half: math.max(
-              nodeDiameter(v.level) / 2,
-              _labelHalfWidths[v.skill.id] ?? _defaultLabelHalfWidth,
-            ),
-            r: nodeDiameter(v.level) / 2,
+      for (final MapEntry(key: id, value: pos) in p.entries)
+        (
+          pos: pos,
+          half: math.max(
+            _radius[id] ?? 0,
+            _labelHalfWidths[id] ?? _defaultLabelHalfWidth,
           ),
+          r: _radius[id] ?? 0,
+        ),
     ];
     (double, double, double, double) box(double s) {
       var l = double.infinity, t = double.infinity;
@@ -370,9 +400,8 @@ class GraphController extends ChangeNotifier {
   }
 
   bool _viewportAtTarget() {
-    final v = _viewport;
-    if (v == null) return true;
-    final target = _fit();
+    final v = _viewport, target = _target;
+    if (v == null || target == null) return true;
     return (v.origin - target.origin).distance < 0.5 &&
         (v.scale - target.scale).abs() < 0.001;
   }
@@ -380,7 +409,8 @@ class GraphController extends ChangeNotifier {
   /// Eases the view toward the fit, so it follows the moving graph without
   /// jumps.
   void _moveViewport() {
-    final v = _viewport, target = _fit();
+    final v = _viewport, target = _target;
+    if (target == null) return;
     if (v == null || _viewportAtTarget()) {
       _viewport = target;
       return;
@@ -411,6 +441,8 @@ class GraphController extends ChangeNotifier {
     final (x, y) = viewport.toGraph(canvasPoint + _grabOffset);
     _layout!.pin(id, x, y);
     _restart();
+    _syncPositions();
+    _syncCanvas();
     notifyListeners();
   }
 
@@ -448,8 +480,20 @@ class GraphController extends ChangeNotifier {
       }
     }
     if (changed.isEmpty) return;
-    // Best effort: unsaved positions are recomputed on the next open.
-    unawaited(savePositions(changed).catchError((Object _) {}));
+    // Best effort: unsaved positions are recomputed on the next open, but
+    // the failure is reported so it does not go unnoticed.
+    unawaited(
+      savePositions(changed).catchError((Object error, StackTrace stack) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            library: 'mesk graph',
+            context: ErrorDescription('while saving graph positions'),
+          ),
+        );
+      }),
+    );
   }
 
   @override
