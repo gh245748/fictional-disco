@@ -9,6 +9,7 @@ import 'package:mesk/data/db.dart';
 import 'package:mesk/data/kv_repo.dart';
 import 'package:mesk/domain/models.dart';
 import 'package:mesk/features/entries/entry_form_screen.dart';
+import 'package:mesk/features/graph/graph_screen.dart';
 import 'package:mesk/features/skills/skill_detail_screen.dart';
 import 'package:mesk/ui/theme.dart';
 
@@ -76,7 +77,7 @@ void main() {
     await t.tap(find.text('Ağ'));
     await t.pumpAndSettle();
     expect(_location(t), '/ag');
-    expect(find.widgetWithText(PlaceholderScreen, 'Ağ'), findsOneWidget);
+    expect(find.byType(GraphScreen), findsOneWidget);
     final nav = t.getSize(find.byKey(MeskShell.navKey));
     expect(nav.height, 72);
   });

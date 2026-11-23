@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../features/entries/entry_form_screen.dart';
 import '../features/focus/focus_screen.dart';
 import '../features/goals/goal_edit_screen.dart';
+import '../features/graph/graph_screen.dart';
 import '../features/habits/habit_edit_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/settings/presets_screen.dart';
@@ -87,7 +88,7 @@ GoRouter buildRouter(Ref ref) {
               ),
             ],
           ),
-          tab('/ag', 'Ağ'),
+          tab('/ag', 'Ağ', screen: GraphScreen.new),
           tab('/karakter', 'Karakter'),
         ],
       ),
