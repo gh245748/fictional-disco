@@ -21,9 +21,7 @@ int trCompare(String a, String b) {
     final ix = _alphabet.indexOf(String.fromCharCode(x[i]));
     final iy = _alphabet.indexOf(String.fromCharCode(y[i]));
     if (ix >= 0 && iy >= 0) return ix.compareTo(iy);
-    // Letters sort before non-letters; otherwise code-unit order.
-    if (ix >= 0) return -1;
-    if (iy >= 0) return 1;
+    // Outside the alphabet: code-unit order.
     return x[i].compareTo(y[i]);
   }
   return x.length.compareTo(y.length);

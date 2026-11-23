@@ -33,6 +33,11 @@ void main() {
     ]);
   });
 
+  test('trCompare falls back to code-unit order outside the alphabet', () {
+    expect(trCompare('Kitap okuma', 'Kitaplık'), lessThan(0));
+    expect(trCompare('1abc', 'zzz'), lessThan(0));
+  });
+
   test('durations and hours', () {
     expect(formatDuration(59), '0 dk');
     expect(formatDuration(60), '1 dk');
