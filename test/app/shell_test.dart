@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mesk/app/app.dart';
@@ -103,5 +104,42 @@ void main() {
     t.container().read(routerProvider).push('/kayit/yeni?skill=okuma&prior=1');
     await t.pumpAndSettle();
     expect(_location(t), '/kayit/yeni?skill=okuma&prior=1');
+  });
+
+  testWidgets('nav labels fit at the largest text scale', (t) async {
+    t.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+    final db = await _db(t, onboarded: true);
+    await _pumpApp(t, db);
+    expect(t.takeException(), isNull);
+
+    final nav = find.byKey(MeskShell.navKey);
+    expect(t.getSize(nav).height, 72);
+    final navRect = t.getRect(nav);
+    for (final (label, _) in MeskShell.tabs) {
+      final text = find.descendant(of: nav, matching: find.text(label));
+      final paragraph = t.renderObject<RenderParagraph>(text);
+      expect(paragraph.textScaler.scale(10), closeTo(13, 1e-9));
+      expect(paragraph.didExceedMaxLines, isFalse, reason: label);
+      // The whole line is laid out (nothing clipped) ...
+      final full = paragraph.getMaxIntrinsicWidth(double.infinity);
+      expect(paragraph.size.width, greaterThanOrEqualTo(full), reason: label);
+      // ... and, after any scaling, drawn inside its tab and the bar.
+      final item = find
+          .ancestor(of: text, matching: find.byType(InkResponse))
+          .first;
+      final itemRect = t.getRect(item);
+      final labelRect = t.getRect(text);
+      expect(itemRect.width, greaterThanOrEqualTo(44), reason: label);
+      expect(itemRect.height, greaterThanOrEqualTo(44), reason: label);
+      for (final corner in [labelRect.topLeft, labelRect.bottomRight]) {
+        expect(
+          itemRect.inflate(0.01).contains(corner),
+          isTrue,
+          reason: '$label $labelRect in $itemRect',
+        );
+        expect(navRect.inflate(0.01).contains(corner), isTrue, reason: label);
+      }
+    }
   });
 }

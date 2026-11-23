@@ -46,15 +46,18 @@ class MeskShell extends StatelessWidget {
               child: Semantics(
                 container: true,
                 label: 'Ana gezinme',
+                // Equal-width tabs (about 75 px on a 390 px phone; the same
+                // centres as the mockup's 68 px items with space-around).
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     for (final (i, (label, glyph)) in tabs.indexed)
-                      _NavItem(
-                        label: label,
-                        glyph: glyph,
-                        active: i == navigationShell.currentIndex,
-                        onTap: () => _select(i),
+                      Expanded(
+                        child: _NavItem(
+                          label: label,
+                          glyph: glyph,
+                          active: i == navigationShell.currentIndex,
+                          onTap: () => _select(i),
+                        ),
                       ),
                   ],
                 ),
@@ -91,22 +94,28 @@ class _NavItem extends StatelessWidget {
         radius: 34,
         highlightColor: Colors.transparent,
         child: SizedBox(
-          width: 68,
           height: 54,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             spacing: 4,
             children: [
               NavIcon(glyph, color: color),
-              Text(
-                label,
-                maxLines: 1,
-                style: TextStyle(
-                  fontFamily: MeskType.sans,
-                  fontSize: 11,
-                  height: 1.2,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                  color: color,
+              // At large text scales a long label shrinks instead of clipping.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontFamily: MeskType.sans,
+                      fontSize: 11,
+                      height: 1.2,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: color,
+                    ),
+                  ),
                 ),
               ),
             ],
