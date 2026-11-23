@@ -7,11 +7,12 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/app.dart';
 import 'app/providers.dart';
+import 'app/router.dart';
 import 'data/db.dart';
 import 'data/log_pipeline.dart';
 import 'data/presets_repo.dart';
 import 'domain/day.dart';
-import 'services/notifications.dart';
+import 'services/local_notifications.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,18 +22,24 @@ Future<void> main() async {
   final db = await MeskDb.openFile(p.join(documents.path, 'mesk.db'));
   await PresetsRepo(db).seedBuiltIns();
   final clock = SystemClock();
-  runApp(
-    ProviderScope(
-      overrides: [
-        dbProvider.overrideWithValue(db),
-        clockProvider.overrideWithValue(clock),
-        // The real notification service arrives in Task 19.
-        notificationsProvider.overrideWithValue(
-          FakeNotificationService(permissionGranted: true),
-        ),
-        pipelineProvider.overrideWithValue(LogPipeline(db, clock)),
-      ],
-      child: const MeskApp(),
-    ),
+  // Tapping a notification opens Odak. The container exists only after the
+  // service is built, hence the late reference.
+  late final ProviderContainer container;
+  final notifications = await createLocalNotificationService(
+    onOpenFocus: () => container.read(routerProvider).go(focusRoute),
   );
+  container = ProviderContainer(
+    overrides: [
+      dbProvider.overrideWithValue(db),
+      clockProvider.overrideWithValue(clock),
+      notificationsProvider.overrideWithValue(notifications.service),
+      pipelineProvider.overrideWithValue(LogPipeline(db, clock)),
+    ],
+  );
+  runApp(
+    UncontrolledProviderScope(container: container, child: const MeskApp()),
+  );
+  if (await notifications.launched()) {
+    container.read(routerProvider).go(focusRoute);
+  }
 }
