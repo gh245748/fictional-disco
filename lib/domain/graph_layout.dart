@@ -47,6 +47,11 @@ class GraphLayout {
   }
 
   static const double _k = 90;
+
+  /// Pairs farther apart than this do not repel (Fruchterman–Reingold's
+  /// 2k cut-off). Without it, k²/d from every other node outweighs the
+  /// gravity and pushes unlinked islands about 2000 px away.
+  static const double _repulsionCutoff = 2 * _k;
   static const double _gravity = 0.02;
   static const double _startTemperature = 40;
   static const double _reheatTemperature = 10;
@@ -154,8 +159,9 @@ class GraphLayout {
     _dx.fillRange(0, n, 0);
     _dy.fillRange(0, n, 0);
 
-    // Repulsion k²/d between every pair.
+    // Repulsion k²/d between every pair closer than the cut-off.
     const k2 = _k * _k;
+    const cutoff2 = _repulsionCutoff * _repulsionCutoff;
     for (var i = 0; i < n; i++) {
       for (var j = i + 1; j < n; j++) {
         var vx = _x[i] - _x[j], vy = _y[i] - _y[j];
@@ -166,6 +172,7 @@ class GraphLayout {
           vy = math.sin(a);
           d2 = 1;
         }
+        if (d2 > cutoff2) continue;
         // force k²/d along unit vector (vx/d, vy/d) = k² * v / d².
         final f = k2 / d2;
         final fx = vx * f, fy = vy * f;

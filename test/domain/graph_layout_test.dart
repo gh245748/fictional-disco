@@ -74,6 +74,16 @@ void main() {
     }
   });
 
+  test('disconnected components stay close', () {
+    // Gitar – Müzik teorisi is not linked to the rest of the mockup graph.
+    // Unbounded k²/d repulsion from every other node out-pushes the weak
+    // gravity and leaves such islands ~2000 px away; they must stay in view.
+    final p = (_mockupLayout()..settle()).positions;
+    for (final MapEntry(key: id, value: pos) in p.entries) {
+      expect(_dist(pos, (0, 0)), lessThan(400), reason: id);
+    }
+  });
+
   test('pinned node stays', () {
     final layout = _mockupLayout();
     layout.pin('okuma', 500, -300);
