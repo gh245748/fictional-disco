@@ -9,6 +9,7 @@ import '../domain/level_events.dart';
 import '../domain/models.dart';
 import '../domain/stat_calc.dart';
 import '../domain/stats.dart';
+import '../domain/timer_machine.dart';
 import '../domain/xp.dart';
 import 'db.dart';
 import 'entries_repo.dart';
@@ -91,36 +92,58 @@ class LogPipeline {
   final KvRepo _kv;
 
   /// Saves a new entry with bonus awards for the skills linked right now, at
-  /// the current rate. Prior-experience entries earn no bonus.
+  /// the current rate. Prior-experience entries earn no bonus. Throws
+  /// [StateError] if an entry with the same id exists (double submit).
   Future<PipelineResult> saveEntry(TimeEntry e) =>
       _mutate(primarySkillId: e.skillId, (txn, data) async {
-        await _entries.put(e, txn: txn);
-        final awards = awardsForEntry(
-          e,
-          linkedSkillIds(e.skillId, data.links),
-          data.settings.bonusRateBp,
-          _newId,
-        );
-        for (final a in awards) {
-          await _awards.put(a, txn: txn);
+        if (data.entries.any((old) => old.id == e.id)) {
+          throw StateError('Entry ${e.id} already exists');
         }
+        await _entries.put(e, txn: txn);
+        await _writeFreshAwards(txn, e, data);
       });
 
-  /// Replaces an entry and rescales its awards with their recorded rates.
+  /// Replaces an entry and fixes its awards (Ruling R13):
+  /// - now prior: every award is removed;
+  /// - moved to another skill, or no longer prior: awards are rewritten for
+  ///   the links and rate current at edit time;
+  /// - otherwise: awards are rescaled with their recorded rates.
+  /// An entry never awards its own skill.
   Future<PipelineResult> updateEntry(TimeEntry e) =>
       _mutate(primarySkillId: e.skillId, (txn, data) async {
-        if (!data.entries.any((old) => old.id == e.id)) {
-          throw StateError('No entry ${e.id} to update');
-        }
+        final old = data.entries.where((x) => x.id == e.id).firstOrNull;
+        if (old == null) throw StateError('No entry ${e.id} to update');
         await _entries.put(e, txn: txn);
         final existing = [
           for (final a in data.awards)
             if (a.entryId == e.id) a,
         ];
+        if (e.isPrior || e.skillId != old.skillId || old.isPrior) {
+          await _awards.deleteForEntry(e.id, txn: txn);
+          await _writeFreshAwards(txn, e, data);
+          return;
+        }
         for (final a in rescaleAwards(existing, e.seconds)) {
-          await _awards.put(a, txn: txn);
+          if (a.skillId == e.skillId) {
+            await _awards.delete(a.id, txn: txn);
+          } else {
+            await _awards.put(a, txn: txn);
+          }
         }
       });
+
+  /// Awards for [e] from the current links and rate; none for prior entries.
+  Future<void> _writeFreshAwards(
+    Transaction txn,
+    TimeEntry e,
+    _Snapshot data,
+  ) async {
+    final linked = linkedSkillIds(e.skillId, data.links)..remove(e.skillId);
+    final awards = awardsForEntry(e, linked, data.settings.bonusRateBp, _newId);
+    for (final a in awards) {
+      await _awards.put(a, txn: txn);
+    }
+  }
 
   /// Removes an entry and the bonus it gave.
   Future<PipelineResult> deleteEntry(String entryId) =>
@@ -191,7 +214,7 @@ class LogPipeline {
           await _tiers.delete(TierReachedRepo.key(skillId, r.tier), txn: txn);
         }
       }
-      await _forgetSkillInSettings(txn, data.settings, skillId);
+      await _forgetSkillInKv(txn, data.settings, skillId);
       await _skills.delete(skillId, txn: txn);
     });
   }
@@ -205,7 +228,8 @@ class LogPipeline {
     await _mutate((txn, data) async {});
   }
 
-  Future<void> _forgetSkillInSettings(
+  /// Clears settings, character and timer references to a deleted skill.
+  Future<void> _forgetSkillInKv(
     Transaction txn,
     AppSettings settings,
     String skillId,
@@ -228,6 +252,10 @@ class LogPipeline {
         character.copyWith(titleSkillId: null, titleLevel: null),
         txn: txn,
       );
+    }
+    // Ruling R14: a timer on the deleted skill cannot be saved anywhere.
+    if ((await _kv.timer(txn: txn)).skillId == skillId) {
+      await _kv.saveTimer(TimerState.idle, txn: txn);
     }
   }
 

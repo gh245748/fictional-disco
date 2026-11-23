@@ -12,6 +12,7 @@ import 'package:mesk/domain/level_curve.dart';
 import 'package:mesk/domain/level_events.dart';
 import 'package:mesk/domain/models.dart';
 import 'package:mesk/domain/stats.dart';
+import 'package:mesk/domain/timer_machine.dart';
 
 const int _hour = 3600;
 
@@ -208,6 +209,98 @@ void main() {
     expect(aw.single.rateBp, 1000);
   });
 
+  test('save rejects an entry id that already exists', () async {
+    await addSkill('A');
+    await addSkill('B');
+    await link('A', {'B'});
+    await pipeline.saveEntry(entry('e1', 'A', _hour));
+
+    await expectLater(
+      pipeline.saveEntry(entry('e1', 'A', 2 * _hour)),
+      throwsStateError,
+    );
+
+    expect((await EntriesRepo(db).get('e1'))!.seconds, _hour);
+    expect((await awards()).map((a) => a.seconds), [360]);
+  });
+
+  test('update to prior drops awards (R13)', () async {
+    await addSkill('A');
+    await addSkill('B');
+    await link('A', {'B'});
+    await pipeline.saveEntry(entry('e1', 'A', _hour));
+    expect(await awards(), hasLength(1));
+
+    await pipeline.updateEntry(
+      entry('e1', 'A', _hour, source: EntrySource.prior),
+    );
+
+    expect(await awards(), isEmpty);
+  });
+
+  test('update from prior to manual creates awards (R13)', () async {
+    await addSkill('A');
+    await addSkill('B');
+    await link('A', {'B'});
+    await pipeline.saveEntry(
+      entry('p1', 'A', _hour, source: EntrySource.prior),
+    );
+    expect(await awards(), isEmpty);
+
+    await pipeline.updateEntry(entry('p1', 'A', _hour));
+
+    expect((await awards()).map((a) => (a.skillId, a.seconds, a.rateBp)), [
+      ('B', 360, 1000),
+    ]);
+  });
+
+  test('moving an entry to another skill re-awards its links (R13)', () async {
+    await addSkill('A');
+    await addSkill('B');
+    await addSkill('C');
+    await link('A', {'B'});
+    await pipeline.saveEntry(entry('e1', 'A', _hour));
+    expect((await awards()).map((a) => a.skillId), ['B']);
+    await link('B', {'A', 'C'});
+    final kv = KvRepo(db);
+    await kv.saveSettings((await kv.settings()).copyWith(bonusRateBp: 2000));
+
+    await pipeline.updateEntry(entry('e1', 'B', _hour));
+
+    final aw = await awards();
+    expect(aw.where((a) => a.skillId == 'B'), isEmpty);
+    expect(
+      {for (final a in aw) a.skillId: (a.seconds, a.rateBp)},
+      {'A': (720, 2000), 'C': (720, 2000)},
+    );
+    expect(aw.map((a) => a.entryId), everyElement('e1'));
+  });
+
+  test('hidden tier is recorded, celebrated and re-locked', () async {
+    await addSkill('A');
+
+    final result = await pipeline.saveEntry(
+      entry('p1', 'A', 2500 * _hour, source: EntrySource.prior),
+    );
+
+    final levelAndTier = result.celebrations.where(
+      (c) => c.kind != CelebrationKind.achievement,
+    );
+    expect(levelAndTier.map((c) => (c.kind, c.tier)), [
+      (CelebrationKind.milestone, null),
+      (CelebrationKind.hiddenTier, HiddenTier.cinar),
+    ]);
+    final tiers = await TierReachedRepo(db).all();
+    expect(tiers.map((t) => (t.skillId, t.tier, t.at)), [
+      ('A', HiddenTier.cinar, now),
+    ]);
+
+    await pipeline.deleteEntry('p1');
+
+    expect(await TierReachedRepo(db).all(), isEmpty);
+    expect(await levelsOf('A'), isEmpty);
+  });
+
   test('delete removes entry and its awards', () async {
     await addSkill('A');
     await addSkill('B');
@@ -361,6 +454,9 @@ void main() {
     await kv.saveCharacter(
       const Character(name: 'Ali', titleSkillId: 'A', titleLevel: 3),
     );
+    await kv.saveTimer(
+      TimerMachine.start(mode: TimerMode.free, skillId: 'A', now: now),
+    );
 
     expect(await levelsOf('B'), [1, 2], reason: '600 + 360 s is level 2');
     expect(await pipeline.bonusGivenBySkill('A'), 360);
@@ -391,10 +487,27 @@ void main() {
     final character = (await kv.character())!;
     expect(character.titleSkillId, isNull);
     expect(character.titleLevel, isNull);
+    expect(await kv.timer(), TimerState.idle, reason: 'R14');
 
     // B lost the 360 s bonus: 600 s is level 1 again.
     expect(levelForXp(600), 1);
     expect(await levelsOf('B'), [1]);
+  });
+
+  test('deleteSkill keeps a timer running on another skill', () async {
+    await addSkill('A');
+    await addSkill('B');
+    final kv = KvRepo(db);
+    final running = TimerMachine.start(
+      mode: TimerMode.free,
+      skillId: 'B',
+      now: now,
+    );
+    await kv.saveTimer(running);
+
+    await pipeline.deleteSkill('A');
+
+    expect(await kv.timer(), running);
   });
 
   test('habit change unlocks streak achievements', () async {
