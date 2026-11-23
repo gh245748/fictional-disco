@@ -38,6 +38,11 @@ void main() {
     expect(trCompare('1abc', 'zzz'), lessThan(0));
   });
 
+  test('trCompare is a total order (non-alphabet before letters)', () {
+    expect(['z', 'é', 'ö']..sort(trCompare), ['é', 'ö', 'z']);
+    expect(['ö', 'z', 'é']..sort(trCompare), ['é', 'ö', 'z']);
+  });
+
   test('durations and hours', () {
     expect(formatDuration(59), '0 dk');
     expect(formatDuration(60), '1 dk');
