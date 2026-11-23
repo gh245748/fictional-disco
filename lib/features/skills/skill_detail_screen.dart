@@ -19,6 +19,7 @@ import '../../ui/widgets/stat_dot.dart';
 import '../../ui/widgets/weekly_chart.dart';
 import '../celebrations/celebration_host.dart';
 import '../entries/entry_form_screen.dart';
+import '../goals/goal_card.dart';
 
 /// The skill screen (§5.12): level and progress, real and experience time,
 /// goal, links, next title, weekly chart, entries and level achievements.
@@ -123,6 +124,7 @@ class _SkillDetailState extends ConsumerState<_SkillDetail> {
             _LevelCard(view: view, color: color),
             const SizedBox(height: 12),
             _GoalArea(view: view),
+            _CompletedGoals(skillId: skill.id),
             const SizedBox(height: 24),
             _Links(skill: skill),
             const SizedBox(height: 20),
@@ -304,8 +306,7 @@ class _LevelCard extends StatelessWidget {
   }
 }
 
-/// Until the goal card arrives (Task 21): a summary of the active goal, or
-/// a button to set one.
+/// The active goal's card, or a prompt to set a goal (§5.10).
 class _GoalArea extends StatelessWidget {
   const _GoalArea({required this.view});
 
@@ -313,39 +314,62 @@ class _GoalArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final goal = view.activeGoal;
-    final status = view.goal;
-    void open() => context.push('/hedef/${view.skill.id}');
-    if (goal == null || status == null) {
-      return MeskCard(
-        child: Row(
-          spacing: 12,
-          children: [
-            const Expanded(
-              child: Text(
-                'Bir hedef koyarak ilerlemeni ölç.',
-                style: MeskType.caption,
-              ),
-            ),
-            MeskPrimaryButton(label: 'Hedef koy', onPressed: open),
-          ],
-        ),
-      );
-    }
+    if (view.activeGoal != null) return GoalCard(view);
     return MeskCard(
-      onTap: open,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 10,
+      child: Row(
+        spacing: 12,
         children: [
-          Text(
-            'Hedef ${formatHours(goal.targetSeconds)} · '
-            '${formatPercent(status.progress)}',
-            style: MeskType.body14,
+          const Expanded(
+            child: Text(
+              'Bir hedef koyarak ilerlemeni ölç.',
+              style: MeskType.caption,
+            ),
           ),
-          MeskProgressBar(value: status.progress, color: MeskColors.accent),
+          MeskPrimaryButton(
+            label: 'Hedef koy',
+            onPressed: () => context.push('/hedef/${view.skill.id}'),
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// Completed goals of a skill, newest first: target and completion date.
+/// Hidden while there are none (the goal card above already invites one).
+class _CompletedGoals extends ConsumerWidget {
+  const _CompletedGoals({required this.skillId});
+
+  final String skillId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final clock = ref.watch(clockProvider);
+    final done = [
+      for (final g in ref.watch(goalsProvider).value ?? const <Goal>[])
+        if (g.skillId == skillId && g.completedAt != null) g,
+    ]..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+    if (done.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        const SectionHeader(title: 'Tamamlanan hedefler'),
+        const SizedBox(height: 4),
+        for (final g in done)
+          Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            alignment: Alignment.centerLeft,
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: MeskColors.divider)),
+            ),
+            child: Text(
+              '${formatHours(g.targetSeconds)} · '
+              '${formatDate(g.completedAt!.add(Duration(minutes: clock.offsetMinutesAt(g.completedAt!))))}',
+              style: MeskType.body14,
+            ),
+          ),
+      ],
     );
   }
 }

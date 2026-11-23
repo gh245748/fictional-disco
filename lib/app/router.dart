@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../features/entries/entry_form_screen.dart';
 import '../features/focus/focus_screen.dart';
+import '../features/goals/goal_edit_screen.dart';
 import '../features/habits/habit_edit_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/settings/presets_screen.dart';
@@ -132,7 +133,11 @@ GoRouter buildRouter(Ref ref) {
         builder: (_, state) =>
             HabitEditScreen(habitId: state.pathParameters['id']),
       ),
-      page('/hedef/:skillId', 'Hedef'),
+      GoRoute(
+        path: '/hedef/:skillId',
+        builder: (_, state) =>
+            GoalEditScreen(skillId: state.pathParameters['skillId']!),
+      ),
       page('/basarimlar', 'Başarımlar'),
       page(
         '/ayarlar',
