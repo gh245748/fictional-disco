@@ -18,13 +18,23 @@ import 'goals_controller.dart';
 /// the deadline needs, the date reached at the current pace, and the
 /// actions that fit. Shows nothing when the skill has no active goal.
 /// Tapping the card opens the goal editor.
-class GoalCard extends ConsumerWidget {
+class GoalCard extends ConsumerStatefulWidget {
   const GoalCard(this.view, {super.key});
 
   final SkillView view;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GoalCard> createState() => _GoalCardState();
+}
+
+class _GoalCardState extends ConsumerState<GoalCard> {
+  /// True while a habit is being created, so a double tap adds only one.
+  bool _converting = false;
+
+  SkillView get view => widget.view;
+
+  @override
+  Widget build(BuildContext context) {
     final goal = view.activeGoal;
     final status = view.goal;
     if (goal == null || status == null) return const SizedBox.shrink();
@@ -69,10 +79,7 @@ class GoalCard extends ConsumerWidget {
             Wrap(
               spacing: 8,
               children: [
-                MeskTextButton(
-                  'Tarihi uzat',
-                  onPressed: () => _extend(context, ref),
-                ),
+                MeskTextButton('Tarihi uzat', onPressed: () => _extend()),
                 MeskTextButton(
                   'Hedefi kapat',
                   color: MeskColors.danger,
@@ -86,7 +93,7 @@ class GoalCard extends ConsumerWidget {
               alignment: Alignment.centerLeft,
               child: MeskSecondaryButton(
                 label: 'Günlük alışkanlığa çevir',
-                onPressed: () => _toHabit(context, ref),
+                onPressed: () => _toHabit(),
               ),
             ),
         ],
@@ -94,9 +101,9 @@ class GoalCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _extend(BuildContext context, WidgetRef ref) async {
+  Future<void> _extend() async {
     final today = await ref.read(todayProvider.future);
-    if (!context.mounted) return;
+    if (!mounted) return;
     final picked = await showDatePicker(
       context: context,
       initialDate: today.addDays(7).toDateTime(),
@@ -112,7 +119,9 @@ class GoalCard extends ConsumerWidget {
         );
   }
 
-  Future<void> _toHabit(BuildContext context, WidgetRef ref) async {
+  Future<void> _toHabit() async {
+    if (_converting) return;
+    _converting = true;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await runAndCelebrate(
@@ -130,6 +139,8 @@ class GoalCard extends ConsumerWidget {
       messenger.showSnackBar(
         const SnackBar(content: Text('Eklenemedi, tekrar dene.')),
       );
+    } finally {
+      _converting = false;
     }
   }
 }
