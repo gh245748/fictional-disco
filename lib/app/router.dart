@@ -11,6 +11,7 @@ import '../features/graph/graph_screen.dart';
 import '../features/habits/habit_edit_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/settings/presets_screen.dart';
+import '../features/settings/settings_screen.dart';
 import '../features/skills/skill_detail_screen.dart';
 import '../features/skills/skill_edit_screen.dart';
 import '../features/skills/skills_screen.dart';
@@ -36,16 +37,6 @@ GoRouter buildRouter(Ref ref) {
     settingsProvider.select((s) => s.value?.onboarded),
     (_, onboarded) => refresh.value = onboarded,
     fireImmediately: true,
-  );
-
-  GoRoute page(
-    String path,
-    String title, {
-    List<RouteBase> routes = const [],
-  }) => GoRoute(
-    path: path,
-    builder: (_, _) => PlaceholderScreen(title),
-    routes: routes,
   );
 
   StatefulShellBranch tab(
@@ -146,9 +137,9 @@ GoRouter buildRouter(Ref ref) {
         path: '/basarimlar',
         builder: (_, _) => const AchievementsScreen(),
       ),
-      page(
-        '/ayarlar',
-        'Ayarlar',
+      GoRoute(
+        path: '/ayarlar',
+        builder: (_, _) => const SettingsScreen(),
         routes: [
           GoRoute(
             path: 'setler',

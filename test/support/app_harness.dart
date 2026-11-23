@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mesk/app/app.dart';
 import 'package:mesk/app/router.dart';
 import 'package:mesk/data/db.dart';
+import 'package:mesk/data/log_pipeline.dart';
 import 'package:mesk/domain/day.dart';
+import 'package:mesk/services/notifications.dart';
 
 import 'demo_data.dart';
 import 'golden.dart';
@@ -30,11 +33,22 @@ Future<void> pumpMeskApp(
   MeskDb db,
   String location, {
   Clock? clock,
+  NotificationService? notifications,
+  LogPipeline? pipeline,
+  List<Override> overrides = const [],
 }) async {
   setPhoneView(t);
   await t.pumpWidget(
     ProviderScope(
-      overrides: appOverrides(db, clock ?? demoClock()),
+      overrides: [
+        ...appOverrides(
+          db,
+          clock ?? demoClock(),
+          notifications: notifications,
+          pipeline: pipeline,
+        ),
+        ...overrides,
+      ],
       child: const MeskApp(),
     ),
   );

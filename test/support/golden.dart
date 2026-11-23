@@ -16,13 +16,14 @@ List<Override> appOverrides(
   MeskDb db,
   Clock clock, {
   NotificationService? notifications,
+  LogPipeline? pipeline,
 }) => [
   dbProvider.overrideWithValue(db),
   clockProvider.overrideWithValue(clock),
   notificationsProvider.overrideWithValue(
     notifications ?? FakeNotificationService(permissionGranted: true),
   ),
-  pipelineProvider.overrideWithValue(LogPipeline(db, clock)),
+  pipelineProvider.overrideWithValue(pipeline ?? LogPipeline(db, clock)),
 ];
 
 /// Sets a 390x844 logical phone at DPR 2 for the rest of the test.

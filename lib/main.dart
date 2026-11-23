@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -14,8 +16,17 @@ import 'data/presets_repo.dart';
 import 'domain/day.dart';
 import 'services/local_notifications.dart';
 
+/// Lists the bundled fonts' SIL Open Font License on the licenses page.
+void _registerFontLicenses() {
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Cormorant Garamond', 'Manrope'], text);
+  });
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _registerFontLicenses();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await initializeDateFormatting('tr');
   final documents = await getApplicationDocumentsDirectory();
