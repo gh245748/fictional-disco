@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/skills/skill_edit_screen.dart';
+import '../features/skills/skills_screen.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'shell.dart';
@@ -35,11 +37,16 @@ GoRouter buildRouter(Ref ref) {
     routes: routes,
   );
 
-  StatefulShellBranch tab(String path, String title) => StatefulShellBranch(
+  StatefulShellBranch tab(
+    String path,
+    String title, {
+    Widget Function()? screen,
+  }) => StatefulShellBranch(
     routes: [
       GoRoute(
         path: path,
-        builder: (_, _) => PlaceholderScreen(title, tab: true),
+        builder: (_, _) =>
+            screen?.call() ?? PlaceholderScreen(title, tab: true),
       ),
     ],
   );
@@ -61,18 +68,25 @@ GoRouter buildRouter(Ref ref) {
         builder: (_, _, shell) => MeskShell(navigationShell: shell),
         branches: [
           tab('/bugun', 'Bugün'),
-          tab('/yetenekler', 'Yetenekler'),
+          tab('/yetenekler', 'Yetenekler', screen: SkillsScreen.new),
           tab('/odak', 'Odak'),
           tab('/ag', 'Ağ'),
           tab('/karakter', 'Karakter'),
         ],
       ),
-      page('/yetenekler/yeni', 'Yeni yetenek'),
+      GoRoute(
+        path: '/yetenekler/yeni',
+        builder: (_, _) => const SkillEditScreen(),
+      ),
       page(
         '/yetenekler/:id',
         'Yetenek',
         routes: [
-          page('duzenle', 'Yeteneği düzenle'),
+          GoRoute(
+            path: 'duzenle',
+            builder: (_, state) =>
+                SkillEditScreen(skillId: state.pathParameters['id']),
+          ),
           page('unvanlar', 'Unvan yolu'),
         ],
       ),
