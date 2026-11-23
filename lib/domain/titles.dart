@@ -219,7 +219,7 @@ const List<String> levelDescriptions = [
   'Derya gibi engin bir bilgin var; kıyısına varılamıyor.',
   'Bilginin okyanusunda sınırsızca yüzüyor, derinliğe dalıyorsun.',
   'Eksiksiz ve olgunlaşmış bir ustasın; her yanın tamamlanmış.',
-  'Ulu bir çınar gibi duruyor, çevrene gölge ve bilgelik sunuyorsun.',
+  'Ulu bir dağ gibi duruyor, çevrene gölge ve bilgelik sunuyorsun.',
   'Yüce bir mertebedesin; ardında bıraktığın izler seni anlatıyor.',
   'Çağlar ötesinden gelen bir bilgelik taşıyor, kadim bir gelenek gibi sürüyorsun.',
   'Zirveye çok yakınsın; manzarası eşsiz, soluğun da bir o kadar derin.',

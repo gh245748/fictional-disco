@@ -56,6 +56,17 @@ void main() {
     }
   });
 
+  test('hidden tier names never appear in level titles or descriptions', () {
+    String lower(String s) =>
+        s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+    final banned = HiddenTier.values.map((t) => lower(hiddenTierName(t)));
+    for (final text in [...levelTitles, ...levelDescriptions]) {
+      for (final name in banned) {
+        expect(lower(text).contains(name), isFalse, reason: text);
+      }
+    }
+  });
+
   test('milestones and stats', () {
     expect(milestoneLevels, {10, 25, 50, 75, 99});
     expect(skillStats.length, 5);
