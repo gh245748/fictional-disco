@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../features/onboarding/onboarding_screen.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'shell.dart';
@@ -55,7 +56,7 @@ GoRouter buildRouter(Ref ref) {
     },
     routes: [
       GoRoute(path: '/', redirect: (_, _) => '/bugun'),
-      page('/baslangic', 'Başlangıç'),
+      GoRoute(path: '/baslangic', builder: (_, _) => const OnboardingScreen()),
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => MeskShell(navigationShell: shell),
         branches: [
