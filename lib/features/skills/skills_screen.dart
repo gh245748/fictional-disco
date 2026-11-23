@@ -151,37 +151,24 @@ class _SkillsScreenState extends ConsumerState<SkillsScreen> {
     ),
   );
 
-  Widget _controls() => ChipTheme(
-    data: const ChipThemeData(
-      shape: StadiumBorder(),
-      showCheckmark: false,
-      backgroundColor: MeskColors.surface,
-      selectedColor: Color(0xFF2A2418),
-      side: BorderSide(color: MeskColors.surfaceBorder),
-      labelStyle: MeskType.body14,
-      padding: EdgeInsets.symmetric(horizontal: 6),
-    ),
-    child: Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        for (final s in SkillSort.values)
-          ChoiceChip(
-            label: Text(s.label),
-            selected: _sort == s,
-            side: _sort == s
-                ? const BorderSide(color: MeskColors.accent)
-                : null,
-            onSelected: (_) => setState(() => _sort = s),
-          ),
-        FilterChip(
-          label: const Text('Stata göre grupla'),
-          selected: _group,
-          side: _group ? const BorderSide(color: MeskColors.accent) : null,
-          onSelected: (v) => setState(() => _group = v),
+  Widget _controls() => Wrap(
+    spacing: 8,
+    runSpacing: 4,
+    children: [
+      for (final s in SkillSort.values)
+        ChoiceChip(
+          label: Text(s.label),
+          selected: _sort == s,
+          side: _sort == s ? meskSelectedChipSide : null,
+          onSelected: (_) => setState(() => _sort = s),
         ),
-      ],
-    ),
+      FilterChip(
+        label: const Text('Stata göre grupla'),
+        selected: _group,
+        side: _group ? meskSelectedChipSide : null,
+        onSelected: (v) => setState(() => _group = v),
+      ),
+    ],
   );
 
   List<Widget> _groupSection(Stat stat, List<SkillView> sorted) {

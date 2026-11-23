@@ -18,6 +18,12 @@ abstract final class MeskColors {
   static const Color accent = Color(0xFFC9A86A);
   static const Color accentHover = Color(0xFFDEC089);
   static const Color track = Color(0xFF2A2722);
+
+  /// Fill of selected chips.
+  static const Color chipSelected = Color(0xFF2A2418);
+
+  /// Muted red for destructive actions.
+  static const Color danger = Color(0xFFE08A73);
 }
 
 Color statColor(Stat s) => switch (s) {
@@ -28,6 +34,20 @@ Color statColor(Stat s) => switch (s) {
   Stat.denge => const Color(0xFF86A78A),
   Stat.irade => const Color(0xFFADA491),
 };
+
+/// Border of a selected chip.
+const BorderSide meskSelectedChipSide = BorderSide(color: MeskColors.accent);
+
+/// The shared chip look, also set as the theme's `chipTheme`.
+const ChipThemeData meskChipTheme = ChipThemeData(
+  shape: StadiumBorder(),
+  showCheckmark: false,
+  backgroundColor: MeskColors.surface,
+  selectedColor: MeskColors.chipSelected,
+  side: BorderSide(color: MeskColors.surfaceBorder),
+  labelStyle: MeskType.body14,
+  padding: EdgeInsets.symmetric(horizontal: 6),
+);
 
 /// Type scale (spec §5.13).
 abstract final class MeskType {
@@ -163,6 +183,7 @@ ThemeData buildMeskTheme() {
           labelLarge: MeskType.body14,
           labelSmall: MeskType.label,
         ),
+    chipTheme: meskChipTheme,
     dividerTheme: const DividerThemeData(
       color: MeskColors.divider,
       thickness: 1,

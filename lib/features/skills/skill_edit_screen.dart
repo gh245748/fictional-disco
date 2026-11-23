@@ -11,18 +11,6 @@ import '../../ui/widgets/buttons.dart';
 import '../../ui/widgets/stat_dot.dart';
 import 'skills_controller.dart';
 
-const Color _danger = Color(0xFFE08A73);
-const BorderSide _selectedSide = BorderSide(color: MeskColors.accent);
-const ChipThemeData _chipTheme = ChipThemeData(
-  shape: StadiumBorder(),
-  showCheckmark: false,
-  backgroundColor: MeskColors.surface,
-  selectedColor: Color(0xFF2A2418),
-  side: BorderSide(color: MeskColors.surfaceBorder),
-  labelStyle: MeskType.body14,
-  padding: EdgeInsets.symmetric(horizontal: 6),
-);
-
 /// Creates a skill, or edits the one with [skillId].
 class SkillEditScreen extends ConsumerWidget {
   const SkillEditScreen({super.key, this.skillId});
@@ -249,7 +237,7 @@ class _SkillFormState extends ConsumerState<_SkillForm> {
           ),
           _DialogButton(
             'Sil',
-            color: _danger,
+            color: MeskColors.danger,
             onPressed: () => Navigator.pop(context, _DeleteChoice.delete),
           ),
         ],
@@ -327,29 +315,26 @@ class _SkillFormState extends ConsumerState<_SkillForm> {
         if (widget.others.isEmpty)
           const Text('Henüz başka yeteneğin yok.', style: MeskType.caption)
         else
-          ChipTheme(
-            data: _chipTheme,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final o in widget.others)
-                  FilterChip(
-                    key: ValueKey('link-${o.id}'),
-                    avatar: StatDot(o.primary),
-                    label: Text(o.name),
-                    selected: _links.contains(o.id),
-                    side: _links.contains(o.id) ? _selectedSide : null,
-                    onSelected: (v) => setState(
-                      () => _links = {
-                        for (final id in _links)
-                          if (id != o.id) id,
-                        if (v) o.id,
-                      },
-                    ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final o in widget.others)
+                FilterChip(
+                  key: ValueKey('link-${o.id}'),
+                  avatar: StatDot(o.primary),
+                  label: Text(o.name),
+                  selected: _links.contains(o.id),
+                  side: _links.contains(o.id) ? meskSelectedChipSide : null,
+                  onSelected: (v) => setState(
+                    () => _links = {
+                      for (final id in _links)
+                        if (id != o.id) id,
+                      if (v) o.id,
+                    },
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         const SizedBox(height: 32),
         MeskPrimaryButton(
@@ -371,7 +356,7 @@ class _SkillFormState extends ConsumerState<_SkillForm> {
                 ),
                 _DialogButton(
                   'Sil',
-                  color: _danger,
+                  color: MeskColors.danger,
                   onPressed: _busy ? null : _delete,
                 ),
               ],
@@ -387,25 +372,22 @@ class _SkillFormState extends ConsumerState<_SkillForm> {
     required Stat? selected,
     Stat? disabled,
     required void Function(Stat?) onChanged,
-  }) => ChipTheme(
-    data: _chipTheme,
-    child: Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        for (final s in skillStats)
-          ChoiceChip(
-            key: ValueKey('$keyPrefix-${s.name}'),
-            avatar: StatDot(s),
-            label: Text(s.label),
-            selected: selected == s,
-            side: selected == s ? _selectedSide : null,
-            onSelected: disabled == s
-                ? null
-                : (v) => onChanged(v ? s : (keyPrefix == 'primary' ? s : null)),
-          ),
-      ],
-    ),
+  }) => Wrap(
+    spacing: 8,
+    runSpacing: 4,
+    children: [
+      for (final s in skillStats)
+        ChoiceChip(
+          key: ValueKey('$keyPrefix-${s.name}'),
+          avatar: StatDot(s),
+          label: Text(s.label),
+          selected: selected == s,
+          side: selected == s ? meskSelectedChipSide : null,
+          onSelected: disabled == s
+              ? null
+              : (v) => onChanged(v ? s : (keyPrefix == 'primary' ? s : null)),
+        ),
+    ],
   );
 }
 

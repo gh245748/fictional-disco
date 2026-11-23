@@ -362,18 +362,6 @@ class _SkillsPage extends StatelessWidget {
   final ValueChanged<CustomSkill> onRemoveCustom;
   final VoidCallback onAddCustom;
 
-  static const _selectedSide = BorderSide(color: MeskColors.accent);
-
-  static ChipThemeData _chipTheme() => const ChipThemeData(
-    shape: StadiumBorder(),
-    showCheckmark: false,
-    backgroundColor: MeskColors.surface,
-    selectedColor: Color(0xFF2A2418),
-    side: BorderSide(color: MeskColors.surfaceBorder),
-    labelStyle: MeskType.body14,
-    padding: EdgeInsets.symmetric(horizontal: 6),
-  );
-
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     child: Column(
@@ -387,48 +375,41 @@ class _SkillsPage extends StatelessWidget {
           'kurulur; sonra istediğini değiştirebilirsin.',
           style: MeskType.caption,
         ),
-        ChipTheme(
-          data: _chipTheme(),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              for (final t in skillTemplates)
-                FilterChip(
-                  avatar: StatDot(t.primary),
-                  label: Text(t.name),
-                  selected: selected.contains(t.name),
-                  side: selected.contains(t.name) ? _selectedSide : null,
-                  onSelected: (_) => onToggle(t.name),
-                ),
-              for (final c in custom)
-                InputChip(
-                  avatar: StatDot(c.primary),
-                  label: Text(c.name),
-                  selected: true,
-                  side: _selectedSide,
-                  onDeleted: () => onRemoveCustom(c),
-                  deleteButtonTooltipMessage: '${c.name} yeteneğini kaldır',
-                ),
-              ActionChip(
-                avatar: const Icon(
-                  Icons.add,
-                  size: 16,
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final t in skillTemplates)
+              FilterChip(
+                avatar: StatDot(t.primary),
+                label: Text(t.name),
+                selected: selected.contains(t.name),
+                side: selected.contains(t.name) ? meskSelectedChipSide : null,
+                onSelected: (_) => onToggle(t.name),
+              ),
+            for (final c in custom)
+              InputChip(
+                avatar: StatDot(c.primary),
+                label: Text(c.name),
+                selected: true,
+                side: meskSelectedChipSide,
+                onDeleted: () => onRemoveCustom(c),
+                deleteButtonTooltipMessage: '${c.name} yeteneğini kaldır',
+              ),
+            ActionChip(
+              avatar: const Icon(Icons.add, size: 16, color: MeskColors.accent),
+              label: const Text(
+                'Kendi yeteneğini ekle',
+                style: TextStyle(
+                  fontFamily: MeskType.sans,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                   color: MeskColors.accent,
                 ),
-                label: const Text(
-                  'Kendi yeteneğini ekle',
-                  style: TextStyle(
-                    fontFamily: MeskType.sans,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: MeskColors.accent,
-                  ),
-                ),
-                onPressed: onAddCustom,
               ),
-            ],
-          ),
+              onPressed: onAddCustom,
+            ),
+          ],
         ),
       ],
     ),
@@ -511,22 +492,19 @@ class _CustomSkillSheetState extends State<_CustomSkillSheet> {
             onChanged: (_) => setState(() {}),
           ),
           const MeskLabel('Ana stat'),
-          ChipTheme(
-            data: _SkillsPage._chipTheme(),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final s in skillStats)
-                  ChoiceChip(
-                    avatar: StatDot(s),
-                    label: Text(s.label),
-                    selected: _stat == s,
-                    side: _stat == s ? _SkillsPage._selectedSide : null,
-                    onSelected: (_) => setState(() => _stat = s),
-                  ),
-              ],
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final s in skillStats)
+                ChoiceChip(
+                  avatar: StatDot(s),
+                  label: Text(s.label),
+                  selected: _stat == s,
+                  side: _stat == s ? meskSelectedChipSide : null,
+                  onSelected: (_) => setState(() => _stat = s),
+                ),
+            ],
           ),
           MeskPrimaryButton(
             label: 'Ekle',
