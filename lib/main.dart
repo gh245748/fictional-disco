@@ -23,12 +23,12 @@ Future<void> main() async {
   await PresetsRepo(db).seedBuiltIns();
   final clock = SystemClock();
   // Tapping a notification opens Odak. The container exists only after the
-  // service is built, hence the late reference.
-  late final ProviderContainer container;
+  // service is built, hence the nullable reference (a tap before it exists is ignored).
+  ProviderContainer? container;
   final notifications = await createLocalNotificationService(
-    onOpenFocus: () => container.read(routerProvider).go(focusRoute),
+    onOpenFocus: () => container?.read(routerProvider).go(focusRoute),
   );
-  container = ProviderContainer(
+  final ready = container = ProviderContainer(
     overrides: [
       dbProvider.overrideWithValue(db),
       clockProvider.overrideWithValue(clock),
@@ -36,10 +36,8 @@ Future<void> main() async {
       pipelineProvider.overrideWithValue(LogPipeline(db, clock)),
     ],
   );
-  runApp(
-    UncontrolledProviderScope(container: container, child: const MeskApp()),
-  );
+  runApp(UncontrolledProviderScope(container: ready, child: const MeskApp()));
   if (await notifications.launched()) {
-    container.read(routerProvider).go(focusRoute);
+    ready.read(routerProvider).go(focusRoute);
   }
 }
