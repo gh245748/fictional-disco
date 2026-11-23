@@ -241,6 +241,11 @@ abstract final class TimerMachine {
     if (mode == TimerMode.pomodoro && preset == null) {
       throw ArgumentError.notNull('preset');
     }
+    assert(
+      preset == null || preset.validate() == null,
+      'Invalid preset: ${preset.validate()}',
+    );
+    now = now.toUtc();
     return TimerState(
       status: TimerStatus.running,
       mode: mode,
@@ -298,6 +303,7 @@ abstract final class TimerMachine {
   }
 
   static TimerState pause(TimerState s, DateTime now) {
+    now = now.toUtc();
     final a = advance(s, now);
     if (a.status != TimerStatus.running) return a;
     final elapsed = elapsedInPhase(a, now);
@@ -309,6 +315,7 @@ abstract final class TimerMachine {
   }
 
   static TimerState resume(TimerState s, DateTime now) {
+    now = now.toUtc();
     if (s.status != TimerStatus.paused) return s;
     return s._copy(
       status: TimerStatus.running,
@@ -322,6 +329,7 @@ abstract final class TimerMachine {
   /// phase now (crediting partial work) and starts the next one.
   static TimerState startNextPhase(TimerState s, DateTime now) {
     if (s.mode != TimerMode.pomodoro || s.status == TimerStatus.idle) return s;
+    now = now.toUtc();
     final a = advance(s, now);
     if (a.status == TimerStatus.waiting) return _begin(a, a.phase, now);
 
@@ -336,7 +344,7 @@ abstract final class TimerMachine {
             end: now,
             seconds: elapsed,
             full: false,
-            unattended: false,
+            unattended: a.phaseStartedAt!.isAfter(a.lastInteractionAt!),
           ),
         ];
       }
@@ -352,21 +360,83 @@ abstract final class TimerMachine {
   /// starts work now. Does nothing during work.
   static TimerState skipPhase(TimerState s, DateTime now) {
     if (s.mode != TimerMode.pomodoro || s.status == TimerStatus.idle) return s;
+    now = now.toUtc();
     final a = advance(s, now);
     if (a.phase == TimerPhase.work) return a;
     return _begin(a, TimerPhase.work, now);
   }
 
-  static List<WorkPhaseRecord> unattendedPhases(TimerState s) =>
-      s.completedWork.where((r) => r.unattended).toList();
+  /// Work phases that ran without the user (§5.7 "gözetimsiz devam"), as of
+  /// [now]: the closed unattended records plus, if the running work phase
+  /// was auto-started after the last interaction, that phase as a partial
+  /// (`full: false`) record up to [now].
+  static List<WorkPhaseRecord> unattendedPhases(TimerState s, DateTime now) {
+    now = now.toUtc();
+    final a = advance(s, now);
+    final running = _runningUnattended(a, now);
+    return [...a.completedWork.where((r) => r.unattended), ?running];
+  }
 
-  /// Drops the unattended work phases whose start is not in [keptStarts].
-  static TimerState keepUnattended(TimerState s, Set<DateTime> keptStarts) =>
-      s._copy(
-        completedWork: s.completedWork
-            .where((r) => !r.unattended || keptStarts.contains(r.start))
-            .toList(),
+  /// The user's answer to the unattended-phases screen, given at [now].
+  /// Advances to [now], keeps the unattended phases whose start is in
+  /// [keptStarts] (as attended records) and drops the rest. A dropped running
+  /// work phase is discarded and the machine waits to start work again. Counts
+  /// as a user interaction, so the same phases are not listed again.
+  static TimerState keepUnattended(
+    TimerState s,
+    Set<DateTime> keptStarts,
+    DateTime now,
+  ) {
+    if (s.status == TimerStatus.idle) return s;
+    now = now.toUtc();
+    final kept = {for (final d in keptStarts) d.toUtc()};
+    final a = advance(s, now);
+    final work = [
+      for (final r in a.completedWork)
+        if (!r.unattended)
+          r
+        else if (kept.contains(r.start))
+          WorkPhaseRecord(
+            start: r.start,
+            end: r.end,
+            seconds: r.seconds,
+            full: r.full,
+            unattended: false,
+          ),
+    ];
+    final running = _runningUnattended(a, now);
+    if (running != null && !kept.contains(running.start)) {
+      return a._copy(
+        status: TimerStatus.waiting,
+        phase: TimerPhase.work,
+        phaseStartedAt: now,
+        completedWork: work,
+        lastInteractionAt: now,
       );
+    }
+    return a._copy(completedWork: work, lastInteractionAt: now);
+  }
+
+  /// The running work phase of an advanced state as a partial unattended
+  /// record up to [now], or null when it is attended or has no time yet.
+  static WorkPhaseRecord? _runningUnattended(TimerState a, DateTime now) {
+    if (a.mode != TimerMode.pomodoro ||
+        a.status != TimerStatus.running ||
+        a.phase != TimerPhase.work) {
+      return null;
+    }
+    final started = a.phaseStartedAt!;
+    if (!started.isAfter(a.lastInteractionAt!)) return null;
+    final elapsed = elapsedInPhase(a, now);
+    if (elapsed == 0) return null;
+    return WorkPhaseRecord(
+      start: started,
+      end: started.add(Duration(seconds: elapsed)),
+      seconds: elapsed,
+      full: false,
+      unattended: true,
+    );
+  }
 
   /// Seconds into the current phase, never negative. In pomodoro mode capped
   /// at the phase length; 0 while idle or waiting.
@@ -408,7 +478,8 @@ abstract final class TimerMachine {
     final a = advance(s, now);
     if (a.status != TimerStatus.running) return const [];
     if (a.mode == TimerMode.free) {
-      final at = a.sessionStartedAt!.add(freeModeWarningAfter);
+      // Counted time: phaseStartedAt already shifts forward with pauses.
+      final at = a.phaseStartedAt!.add(freeModeWarningAfter);
       return [
         if (at.isAfter(now))
           PhaseBoundary(at: at, kind: BoundaryKind.freeModeWarning),
@@ -453,6 +524,7 @@ abstract final class TimerMachine {
     if (s.status == TimerStatus.idle) {
       throw StateError('No timer session to finish');
     }
+    now = now.toUtc();
     final a = advance(s, now);
     var work = a.completedWork.fold<int>(0, (sum, r) => sum + r.seconds);
     if (a.phase == TimerPhase.work && a.status != TimerStatus.waiting) {

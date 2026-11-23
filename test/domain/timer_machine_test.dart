@@ -151,15 +151,50 @@ void main() {
   test('unattended auto-started work phases are listed and can be dropped', () {
     var s = TimerMachine.advance(pomodoro(autoWork: true), m(90));
     expect(s.lastInteractionAt, t0);
-    expect(TimerMachine.unattendedPhases(s).map((r) => r.start), [
+    expect(TimerMachine.unattendedPhases(s, m(90)).map((r) => r.start), [
       m(30),
       m(60),
     ]);
-    s = TimerMachine.keepUnattended(s, {m(30)});
-    expect(TimerMachine.unattendedPhases(s).map((r) => r.start), [m(30)]);
+    s = TimerMachine.keepUnattended(s, {m(30)}, m(90));
+    // Confirmed: the list does not come back.
+    expect(TimerMachine.unattendedPhases(s, m(90)), isEmpty);
+    expect(s.lastInteractionAt, m(90));
     final sum = TimerMachine.finish(s, m(90));
     expect(sum.workSeconds, 3000);
     expect(sum.pomodoros, 2);
+  });
+
+  test('the running auto-started work phase is listed and can be dropped', () {
+    final s = TimerMachine.advance(pomodoro(autoWork: true), m(84));
+    final listed = TimerMachine.unattendedPhases(s, m(84));
+    expect(listed.map((r) => r.start), [m(30), m(60)]);
+    expect(listed.last.end, m(84));
+    expect(listed.last.seconds, 24 * 60);
+    expect(listed.last.full, isFalse);
+    expect(listed.last.unattended, isTrue);
+
+    final dropped = TimerMachine.keepUnattended(s, {}, m(84));
+    expect(dropped.status, TimerStatus.waiting);
+    expect(dropped.phase, TimerPhase.work);
+    final sum = TimerMachine.finish(dropped, m(84));
+    expect(sum.workSeconds, 1500);
+    expect(sum.pomodoros, 1);
+
+    final kept = TimerMachine.keepUnattended(s, {m(30), m(60)}, m(84));
+    expect(kept.status, TimerStatus.running);
+    expect(kept.phaseStartedAt, m(60));
+    expect(TimerMachine.unattendedPhases(kept, m(84)), isEmpty);
+    final keptSum = TimerMachine.finish(kept, m(84));
+    expect(keptSum.workSeconds, 1500 + 1500 + 24 * 60);
+    expect(keptSum.pomodoros, 2);
+  });
+
+  test('startNextPhase marks an unattended partial work phase', () {
+    final s = TimerMachine.advance(pomodoro(autoWork: true), m(70));
+    final next = TimerMachine.startNextPhase(s, m(70));
+    expect(next.completedWork.last.seconds, 600);
+    expect(next.completedWork.last.full, isFalse);
+    expect(next.completedWork.last.unattended, isTrue);
   });
 
   test('free mode', () {
@@ -181,6 +216,38 @@ void main() {
     expect(b.single.ending, isNull);
     expect(b.single.next, isNull);
     expect(TimerMachine.upcomingBoundaries(s, m(241)), isEmpty);
+  });
+
+  test('free mode warning counts paused time out', () {
+    var s = TimerMachine.start(mode: TimerMode.free, skillId: 's1', now: t0);
+    s = TimerMachine.pause(s, m(10));
+    s = TimerMachine.resume(s, m(70));
+    final b = TimerMachine.upcomingBoundaries(s, m(70)).single;
+    expect(b.kind, BoundaryKind.freeModeWarning);
+    expect(b.at, m(60).add(TimerMachine.freeModeWarningAfter));
+  });
+
+  test('start stores UTC and rejects an invalid preset', () {
+    final local = DateTime(2026, 11, 21, 12);
+    final s = TimerMachine.start(
+      mode: TimerMode.pomodoro,
+      skillId: 's1',
+      preset: preset(),
+      now: local,
+    );
+    expect(s.phaseStartedAt!.isUtc, isTrue);
+    expect(s.sessionStartedAt!.isUtc, isTrue);
+    expect(s.lastInteractionAt!.isUtc, isTrue);
+    expect(s.phaseStartedAt, local.toUtc());
+    expect(
+      () => TimerMachine.start(
+        mode: TimerMode.pomodoro,
+        skillId: 's1',
+        preset: const TimerPreset('x', 'x', 0, 5, 15, 4, true, false, false),
+        now: t0,
+      ),
+      throwsA(isA<AssertionError>()),
+    );
   });
 
   test('free mode pause freezes elapsed', () {
