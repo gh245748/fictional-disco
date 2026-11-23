@@ -121,6 +121,17 @@ void main() {
     expect(_color(t, 'Çınar'), MeskColors.text);
   });
 
+  testWidgets('title path hides hidden tiers before level 99', (t) async {
+    final db = await openTestDb(t);
+    await pumpMeskApp(t, db, '/yetenekler/ingilizce/unvanlar');
+    await t.scrollUntilVisible(find.text('Pir'), 400);
+    await t.pumpAndSettle();
+    await t.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+    await t.pumpAndSettle();
+    expect(find.text('Pir'), findsOneWidget);
+    expect(find.text('???'), findsNothing);
+  });
+
   testWidgets('title path shows reached titles bright and future faint', (
     t,
   ) async {

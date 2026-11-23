@@ -167,6 +167,25 @@ void main() {
     expect(await _entriesOf(t, db, 'hitabet'), hasLength(1));
   });
 
+  testWidgets('entry ending in the future rejected', (t) async {
+    final db = await openTestDb(t);
+    await pumpMeskApp(t, db, '/yetenekler/hitabet');
+    await pushRoute(t, '/kayit/yeni?skill=hitabet');
+    // 20:30 + 1 h ends at 21:30; now is 21:00.
+    await _setDuration(t, hours: 1);
+    await _pickStartTime(t, 20, 30);
+    await tapVisible(t, find.text('Kaydet'));
+    expect(find.text('Kayıt gelecekte bitemez.'), findsOneWidget);
+    expect(await _entriesOf(t, db, 'hitabet'), hasLength(1));
+
+    // 22 h without a start time would run from 00:00 to 22:00.
+    await tapVisible(t, find.byTooltip('Başlangıç saatini kaldır'));
+    await _setDuration(t, hours: 22);
+    await tapVisible(t, find.text('Kaydet'));
+    expect(find.text('Kayıt gelecekte bitemez.'), findsOneWidget);
+    expect(await _entriesOf(t, db, 'hitabet'), hasLength(1));
+  });
+
   testWidgets('zero duration rejected', (t) async {
     final db = await openTestDb(t);
     await pumpMeskApp(t, db, '/yetenekler/hitabet');
@@ -249,7 +268,32 @@ void main() {
       ),
       'Gelecekteki bir zaman seçilemez.',
     );
-    expect(entryError(seconds: 60, startedAtUtc: now, nowUtc: now), isNull);
+    expect(
+      entryError(
+        seconds: 61,
+        startedAtUtc: now.subtract(const Duration(minutes: 1)),
+        nowUtc: now,
+      ),
+      'Kayıt gelecekte bitemez.',
+    );
+    expect(
+      entryError(
+        seconds: 60,
+        startedAtUtc: now.subtract(const Duration(minutes: 1)),
+        nowUtc: now,
+      ),
+      isNull,
+    );
+    // Prior experience is a lump sum, not a session; only its start counts.
+    expect(
+      entryError(
+        seconds: 1000 * 3600,
+        startedAtUtc: now.subtract(const Duration(hours: 1)),
+        nowUtc: now,
+        prior: true,
+      ),
+      isNull,
+    );
   });
 
   test('localToUtc applies the offset', () {

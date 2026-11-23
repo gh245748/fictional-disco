@@ -16,14 +16,20 @@ const String priorHint =
     'sayılmaz.';
 
 /// Why an entry of [seconds] starting at [startedAtUtc] cannot be saved, or
-/// null when it can.
+/// null when it can. Tracked time may neither start nor end in the future
+/// (Ruling R18); [prior] experience is a lump sum of past time, so only its
+/// start is checked.
 String? entryError({
   required int seconds,
   required DateTime startedAtUtc,
   required DateTime nowUtc,
+  bool prior = false,
 }) {
   if (seconds <= 0) return 'Süre sıfırdan büyük olmalı.';
   if (startedAtUtc.isAfter(nowUtc)) return 'Gelecekteki bir zaman seçilemez.';
+  if (!prior && startedAtUtc.add(Duration(seconds: seconds)).isAfter(nowUtc)) {
+    return 'Kayıt gelecekte bitemez.';
+  }
   return null;
 }
 
@@ -316,6 +322,7 @@ class _EntryFormState extends ConsumerState<_EntryForm> {
       seconds: e.seconds,
       startedAtUtc: e.startedAt,
       nowUtc: ref.read(clockProvider).nowUtc(),
+      prior: e.isPrior,
     );
     setState(() => _error = error);
     if (error != null) return;

@@ -8,8 +8,9 @@ import '../../domain/titles.dart';
 import '../../ui/theme.dart';
 
 /// "Unvan yolu" (§5.5): all 99 titles by band, reached ones bright with
-/// their date, future ones faint, then the three hidden tiers as "???"
-/// until reached.
+/// their date, future ones faint. From level 99 on, the three hidden tiers
+/// follow as "???" until reached; before that they are not mentioned at all
+/// (§5.3, Ruling R16).
 class TitlePathScreen extends ConsumerWidget {
   const TitlePathScreen({super.key, required this.skillId});
 
@@ -58,7 +59,8 @@ class TitlePathScreen extends ConsumerWidget {
         ),
       );
     }
-    for (final t in HiddenTier.values) {
+    final showTiers = (view?.level ?? 1) >= maxLevel;
+    for (final t in showTiers ? HiddenTier.values : const <HiddenTier>[]) {
       final at = tierDates[t];
       rows.add(
         _TitleRow(
