@@ -12,6 +12,7 @@ import '../features/skills/skill_detail_screen.dart';
 import '../features/skills/skill_edit_screen.dart';
 import '../features/skills/skills_screen.dart';
 import '../features/skills/title_path_screen.dart';
+import '../features/today/today_screen.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'shell.dart';
@@ -74,7 +75,7 @@ GoRouter buildRouter(Ref ref) {
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => MeskShell(navigationShell: shell),
         branches: [
-          tab('/bugun', 'Bugün'),
+          tab('/bugun', 'Bugün', screen: TodayScreen.new),
           tab('/yetenekler', 'Yetenekler', screen: SkillsScreen.new),
           // Query parameter: `skill` (skill id to preselect).
           StatefulShellBranch(

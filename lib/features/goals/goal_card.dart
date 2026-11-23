@@ -14,6 +14,62 @@ import '../../ui/widgets/progress_bar.dart';
 import '../celebrations/celebration_host.dart';
 import 'goals_controller.dart';
 
+/// "Hedef 100 sa · %27".
+String goalHeadline(SkillView view) {
+  final goal = view.activeGoal!;
+  return 'Hedef ${formatHours(goal.targetSeconds)} · '
+      '${formatPercent(view.goal!.progress)}';
+}
+
+/// "31 Mart için günde 34 dk"; null when the goal has no deadline or has
+/// expired.
+String? goalDeadlineLine(SkillView view) {
+  final status = view.goal!;
+  final deadline = view.activeGoal!.deadline;
+  if (status.expired ||
+      deadline == null ||
+      status.requiredDailySeconds == null) {
+    return null;
+  }
+  return '${formatDayMonth(deadline.toDateTime())} için günde '
+      '${habitMinutesFor(status)} dk';
+}
+
+/// The one-line goal summary of a skill row on Today: the card's headline and
+/// deadline pace, e.g. "Hedef 100 sa · %27 · 31 Mart için günde 34 dk".
+/// Shows nothing when the skill has no active goal.
+class GoalLine extends StatelessWidget {
+  const GoalLine(this.view, {super.key});
+
+  final SkillView view;
+
+  @override
+  Widget build(BuildContext context) {
+    if (view.activeGoal == null || view.goal == null) {
+      return const SizedBox.shrink();
+    }
+    final text = [
+      goalHeadline(view),
+      if (view.goal!.expired) 'Süre doldu' else ?goalDeadlineLine(view),
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        spacing: 6,
+        children: [
+          const Icon(Icons.adjust, size: 13, color: MeskColors.accent),
+          Expanded(
+            child: Text(
+              text,
+              style: MeskType.caption.copyWith(color: MeskColors.text),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The active goal of a skill (§5.10): target and progress, the daily time
 /// the deadline needs, the date reached at the current pace, and the
 /// actions that fit. Shows nothing when the skill has no active goal.
@@ -40,18 +96,13 @@ class _GoalCardState extends ConsumerState<GoalCard> {
     if (goal == null || status == null) return const SizedBox.shrink();
     final deadline = goal.deadline;
     final projected = status.projectedDay;
-    final required = status.requiredDailySeconds;
     return MeskCard(
       onTap: () => context.push('/hedef/${view.skill.id}'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 10,
         children: [
-          Text(
-            'Hedef ${formatHours(goal.targetSeconds)} · '
-            '${formatPercent(status.progress)}',
-            style: MeskType.body14,
-          ),
+          Text(goalHeadline(view), style: MeskType.body14),
           MeskProgressBar(value: status.progress, color: MeskColors.accent),
           if (status.expired)
             const Text(
@@ -63,12 +114,8 @@ class _GoalCardState extends ConsumerState<GoalCard> {
                 color: MeskColors.danger,
               ),
             )
-          else if (deadline != null && required != null)
-            Text(
-              '${formatDayMonth(deadline.toDateTime())} için günde '
-              '${habitMinutesFor(status)} dk',
-              style: MeskType.body14,
-            ),
+          else if (goalDeadlineLine(view) case final line?)
+            Text(line, style: MeskType.body14),
           Text(
             projected == null
                 ? 'Bu hızla tahmin yok'

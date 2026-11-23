@@ -874,6 +874,7 @@ class AppSettings {
     this.sound = true,
     this.vibration = true,
     this.lastBackupAt,
+    this.backupReminderDismissedAt,
     this.lastSkillId,
     this.lastPresetBySkill = const {},
     this.onboarded = false,
@@ -885,6 +886,7 @@ class AppSettings {
     sound: j['sound']! as bool,
     vibration: j['vibration']! as bool,
     lastBackupAt: _dtN(j['lastBackupAt']),
+    backupReminderDismissedAt: _dtN(j['backupReminderDismissedAt']),
     lastSkillId: j['lastSkillId'] as String?,
     lastPresetBySkill: {
       for (final e in (j['lastPresetBySkill']! as Map).entries)
@@ -900,6 +902,9 @@ class AppSettings {
   final bool sound;
   final bool vibration;
   final DateTime? lastBackupAt;
+
+  /// When the Today backup reminder was last dismissed.
+  final DateTime? backupReminderDismissedAt;
   final String? lastSkillId;
   final Map<String, String> lastPresetBySkill;
   final bool onboarded;
@@ -910,6 +915,7 @@ class AppSettings {
     bool? sound,
     bool? vibration,
     Object? lastBackupAt = _keep,
+    Object? backupReminderDismissedAt = _keep,
     Object? lastSkillId = _keep,
     Map<String, String>? lastPresetBySkill,
     bool? onboarded,
@@ -919,6 +925,10 @@ class AppSettings {
     sound: sound ?? this.sound,
     vibration: vibration ?? this.vibration,
     lastBackupAt: _pick<DateTime>(lastBackupAt, this.lastBackupAt),
+    backupReminderDismissedAt: _pick<DateTime>(
+      backupReminderDismissedAt,
+      this.backupReminderDismissedAt,
+    ),
     lastSkillId: _pick<String>(lastSkillId, this.lastSkillId),
     lastPresetBySkill: lastPresetBySkill ?? this.lastPresetBySkill,
     onboarded: onboarded ?? this.onboarded,
@@ -930,6 +940,7 @@ class AppSettings {
     'sound': sound,
     'vibration': vibration,
     'lastBackupAt': _isoN(lastBackupAt),
+    'backupReminderDismissedAt': _isoN(backupReminderDismissedAt),
     'lastSkillId': lastSkillId,
     'lastPresetBySkill': lastPresetBySkill,
     'onboarded': onboarded,
@@ -943,6 +954,7 @@ class AppSettings {
       other.sound == sound &&
       other.vibration == vibration &&
       other.lastBackupAt == lastBackupAt &&
+      other.backupReminderDismissedAt == backupReminderDismissedAt &&
       other.lastSkillId == lastSkillId &&
       const MapEquality<String, String>().equals(
         other.lastPresetBySkill,
@@ -957,6 +969,7 @@ class AppSettings {
     sound,
     vibration,
     lastBackupAt,
+    backupReminderDismissedAt,
     lastSkillId,
     const MapEquality<String, String>().hash(lastPresetBySkill),
     onboarded,
