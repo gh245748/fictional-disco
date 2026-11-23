@@ -1,73 +1,110 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 /// Diameter of a skill node for a given level.
 double nodeDiameter(int level) => 2 * (4 + 1.9 * math.sqrt(level));
 
 /// Fruchterman–Reingold style force-directed layout with a collision pass.
 /// Deterministic for a given input and seed (only `math.Random(seed)`).
+///
+/// State is held in index-addressed typed lists so a step does no map
+/// lookups or allocations (smooth for ~150 nodes).
 class GraphLayout {
   GraphLayout({
     required Map<String, double> radii,
     required List<(String, String)> edges,
     Map<String, (double, double)> initial = const {},
     int seed = 7,
-  }) : _radii = Map.of(radii),
-       _edges = [
-         for (final (a, b) in edges)
-           if (a != b && radii.containsKey(a) && radii.containsKey(b)) (a, b),
-       ],
+  }) : _ids = radii.keys.toList(growable: false),
        _rng = math.Random(seed) {
-    _place(initial);
+    final n = _ids.length;
+    final index = {for (var i = 0; i < n; i++) _ids[i]: i};
+    _radius = Float64List(n);
+    _x = Float64List(n);
+    _y = Float64List(n);
+    _dx = Float64List(n);
+    _dy = Float64List(n);
+    _sx = Float64List(n);
+    _sy = Float64List(n);
+    _pinned = List<bool>.filled(n, false);
+    for (var i = 0; i < n; i++) {
+      _radius[i] = radii[_ids[i]]!;
+    }
+    final seen = <int>{};
+    final ea = <int>[], eb = <int>[];
+    for (final (a, b) in edges) {
+      final ia = index[a], ib = index[b];
+      if (ia == null || ib == null || ia == ib) continue;
+      final lo = math.min(ia, ib), hi = math.max(ia, ib);
+      if (seen.add(lo * n + hi)) {
+        ea.add(lo);
+        eb.add(hi);
+      }
+    }
+    _edgeA = Int32List.fromList(ea);
+    _edgeB = Int32List.fromList(eb);
+    _place(initial, index);
   }
 
   static const double _k = 90;
   static const double _gravity = 0.02;
   static const double _startTemperature = 40;
+  static const double _reheatTemperature = 10;
   static const double _cooling = 0.98;
   static const double _gap = 8;
   static const double _settleThreshold = 0.5;
   static const int _settleStreakNeeded = 10;
 
-  final Map<String, double> _radii;
-  final List<(String, String)> _edges;
+  final List<String> _ids;
   final math.Random _rng;
-  final Map<String, (double, double)> _pos = {};
-  final Set<String> _pinned = {};
+  late final Float64List _radius, _x, _y, _dx, _dy, _sx, _sy;
+  late final List<bool> _pinned;
+  late final Int32List _edgeA, _edgeB;
   double _temperature = _startTemperature;
   int _calmSteps = 0;
 
-  Map<String, (double, double)> get positions => Map.unmodifiable(_pos);
+  Map<String, (double, double)> get positions => Map.unmodifiable({
+    for (var i = 0; i < _ids.length; i++) _ids[i]: (_x[i], _y[i]),
+  });
 
   /// True once the largest displacement of free nodes stayed below 0.5 for
   /// 10 consecutive steps.
   bool get settled => _calmSteps >= _settleStreakNeeded;
 
-  void _place(Map<String, (double, double)> initial) {
-    final ids = _radii.keys.toList();
-    for (final id in ids) {
-      final p = initial[id];
-      if (p != null) _pos[id] = p;
-    }
-    final neighbors = <String, List<String>>{};
-    for (final (a, b) in _edges) {
-      (neighbors[a] ??= []).add(b);
-      (neighbors[b] ??= []).add(a);
-    }
-    final circleRadius = _k * math.max(1, math.sqrt(ids.length)) / 2;
-    final phase = _rng.nextDouble() * 2 * math.pi;
-    for (var i = 0; i < ids.length; i++) {
-      final id = ids[i];
-      if (_pos.containsKey(id)) continue;
-      final placed = [
-        for (final n in neighbors[id] ?? const <String>[])
-          if (_pos[n] != null) _pos[n]!,
-      ];
-      if (placed.isNotEmpty) {
-        _pos[id] = placeNear(placed, _rng);
-      } else {
-        final a = phase + 2 * math.pi * i / ids.length;
-        _pos[id] = (circleRadius * math.cos(a), circleRadius * math.sin(a));
+  void _place(Map<String, (double, double)> initial, Map<String, int> index) {
+    final n = _ids.length;
+    final placed = List<bool>.filled(n, false);
+    for (var i = 0; i < n; i++) {
+      final p = initial[_ids[i]];
+      if (p != null) {
+        _x[i] = p.$1;
+        _y[i] = p.$2;
+        placed[i] = true;
       }
+    }
+    final neighbors = List.generate(n, (_) => <int>[]);
+    for (var e = 0; e < _edgeA.length; e++) {
+      neighbors[_edgeA[e]].add(_edgeB[e]);
+      neighbors[_edgeB[e]].add(_edgeA[e]);
+    }
+    final circleRadius = _k * math.max(1, math.sqrt(n)) / 2;
+    final phase = _rng.nextDouble() * 2 * math.pi;
+    for (var i = 0; i < n; i++) {
+      if (placed[i]) continue;
+      final near = [
+        for (final j in neighbors[i])
+          if (placed[j]) (_x[j], _y[j]),
+      ];
+      if (near.isNotEmpty) {
+        final p = placeNear(near, _rng);
+        _x[i] = p.$1;
+        _y[i] = p.$2;
+      } else {
+        final a = phase + 2 * math.pi * i / n;
+        _x[i] = circleRadius * math.cos(a);
+        _y[i] = circleRadius * math.sin(a);
+      }
+      placed[i] = true;
     }
   }
 
@@ -90,79 +127,85 @@ class GraphLayout {
   }
 
   void pin(String id, double x, double y) {
-    if (!_radii.containsKey(id)) return;
-    _pinned.add(id);
-    _pos[id] = (x, y);
-    _calmSteps = 0;
+    final i = _ids.indexOf(id);
+    if (i < 0) return;
+    _pinned[i] = true;
+    _x[i] = x;
+    _y[i] = y;
+    _reheat();
   }
 
   void unpin(String id) {
-    if (_pinned.remove(id)) _calmSteps = 0;
+    final i = _ids.indexOf(id);
+    if (i < 0 || !_pinned[i]) return;
+    _pinned[i] = false;
+    _reheat();
+  }
+
+  void _reheat() {
+    _temperature = math.max(_temperature, _reheatTemperature);
+    _calmSteps = 0;
   }
 
   void step() {
-    final ids = _pos.keys.toList();
-    final dx = {for (final id in ids) id: 0.0};
-    final dy = {for (final id in ids) id: 0.0};
+    final n = _ids.length;
+    _sx.setAll(0, _x);
+    _sy.setAll(0, _y);
+    _dx.fillRange(0, n, 0);
+    _dy.fillRange(0, n, 0);
 
     // Repulsion k²/d between every pair.
-    for (var i = 0; i < ids.length; i++) {
-      for (var j = i + 1; j < ids.length; j++) {
-        final (ax, ay) = _pos[ids[i]]!;
-        final (bx, by) = _pos[ids[j]]!;
-        var vx = ax - bx, vy = ay - by;
-        var d = math.sqrt(vx * vx + vy * vy);
-        if (d < 1e-6) {
+    const k2 = _k * _k;
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        var vx = _x[i] - _x[j], vy = _y[i] - _y[j];
+        var d2 = vx * vx + vy * vy;
+        if (d2 < 1e-12) {
           final a = _rng.nextDouble() * 2 * math.pi;
           vx = math.cos(a);
           vy = math.sin(a);
-          d = 1;
+          d2 = 1;
         }
-        final f = _k * _k / d;
-        final fx = vx / d * f, fy = vy / d * f;
-        dx[ids[i]] = dx[ids[i]]! + fx;
-        dy[ids[i]] = dy[ids[i]]! + fy;
-        dx[ids[j]] = dx[ids[j]]! - fx;
-        dy[ids[j]] = dy[ids[j]]! - fy;
+        // force k²/d along unit vector (vx/d, vy/d) = k² * v / d².
+        final f = k2 / d2;
+        final fx = vx * f, fy = vy * f;
+        _dx[i] += fx;
+        _dy[i] += fy;
+        _dx[j] -= fx;
+        _dy[j] -= fy;
       }
     }
     // Attraction d²/k along edges.
-    for (final (a, b) in _edges) {
-      final (ax, ay) = _pos[a]!;
-      final (bx, by) = _pos[b]!;
-      final vx = ax - bx, vy = ay - by;
+    for (var e = 0; e < _edgeA.length; e++) {
+      final a = _edgeA[e], b = _edgeB[e];
+      final vx = _x[a] - _x[b], vy = _y[a] - _y[b];
       final d = math.sqrt(vx * vx + vy * vy);
       if (d < 1e-6) continue;
-      final f = d * d / _k;
-      final fx = vx / d * f, fy = vy / d * f;
-      dx[a] = dx[a]! - fx;
-      dy[a] = dy[a]! - fy;
-      dx[b] = dx[b]! + fx;
-      dy[b] = dy[b]! + fy;
+      final f = d / _k; // d²/k times unit vector v/d
+      final fx = vx * f, fy = vy * f;
+      _dx[a] -= fx;
+      _dy[a] -= fy;
+      _dx[b] += fx;
+      _dy[b] += fy;
     }
 
-    final before = Map.of(_pos);
-    for (final id in ids) {
-      if (_pinned.contains(id)) continue;
-      final (x, y) = _pos[id]!;
-      final fx = dx[id]! - _gravity * x;
-      final fy = dy[id]! - _gravity * y;
+    for (var i = 0; i < n; i++) {
+      if (_pinned[i]) continue;
+      final fx = _dx[i] - _gravity * _x[i];
+      final fy = _dy[i] - _gravity * _y[i];
       final mag = math.sqrt(fx * fx + fy * fy);
       if (mag < 1e-9) continue;
-      final move = math.min(mag, _temperature);
-      _pos[id] = (x + fx / mag * move, y + fy / mag * move);
+      final move = math.min(mag, _temperature) / mag;
+      _x[i] += fx * move;
+      _y[i] += fy * move;
     }
     _collide();
 
     var maxMove = 0.0;
-    for (final id in ids) {
-      if (_pinned.contains(id)) continue;
-      final (x0, y0) = before[id]!;
-      final (x1, y1) = _pos[id]!;
-      maxMove = math.max(
-        maxMove,
-        math.sqrt(math.pow(x1 - x0, 2) + math.pow(y1 - y0, 2)),
-      );
+    for (var i = 0; i < n; i++) {
+      if (_pinned[i]) continue;
+      final mx = _x[i] - _sx[i], my = _y[i] - _sy[i];
+      maxMove = math.max(maxMove, math.sqrt(mx * mx + my * my));
     }
     _calmSteps = maxMove < _settleThreshold ? _calmSteps + 1 : 0;
     _temperature *= _cooling;
@@ -179,18 +222,15 @@ class GraphLayout {
   /// Pushes overlapping pairs apart to r1 + r2 + 8. Returns whether any pair
   /// was moved.
   bool _collide() {
-    final ids = _pos.keys.toList();
+    final n = _ids.length;
     var moved = false;
-    for (var i = 0; i < ids.length; i++) {
-      for (var j = i + 1; j < ids.length; j++) {
-        final a = ids[i], b = ids[j];
-        final aPinned = _pinned.contains(a), bPinned = _pinned.contains(b);
+    for (var a = 0; a < n; a++) {
+      for (var b = a + 1; b < n; b++) {
+        final aPinned = _pinned[a], bPinned = _pinned[b];
         if (aPinned && bPinned) continue;
-        final (ax, ay) = _pos[a]!;
-        final (bx, by) = _pos[b]!;
-        var vx = ax - bx, vy = ay - by;
+        var vx = _x[a] - _x[b], vy = _y[a] - _y[b];
         var d = math.sqrt(vx * vx + vy * vy);
-        final minD = _radii[a]! + _radii[b]! + _gap;
+        final minD = _radius[a] + _radius[b] + _gap;
         if (d >= minD) continue;
         if (d < 1e-6) {
           final ang = _rng.nextDouble() * 2 * math.pi;
@@ -203,8 +243,10 @@ class GraphLayout {
         final ux = vx / d, uy = vy / d;
         final shareA = aPinned ? 0.0 : (bPinned ? 1.0 : 0.5);
         final shareB = 1 - shareA;
-        _pos[a] = (ax + ux * push * shareA, ay + uy * push * shareA);
-        _pos[b] = (bx - ux * push * shareB, by - uy * push * shareB);
+        _x[a] += ux * push * shareA;
+        _y[a] += uy * push * shareA;
+        _x[b] -= ux * push * shareB;
+        _y[b] -= uy * push * shareB;
         moved = true;
       }
     }

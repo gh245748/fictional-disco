@@ -105,4 +105,36 @@ void main() {
       expect(_dist(p, (cx, cy)), lessThanOrEqualTo(120));
     }
   });
+
+  test('pin reheats so neighbours respond after cooling', () {
+    final layout = _mockupLayout()..settle();
+    final before = layout.positions['yazilim']!;
+    layout.pin('ingilizce', 600, 600);
+    for (var i = 0; i < 20; i++) {
+      layout.step();
+    }
+    expect(_dist(layout.positions['yazilim']!, before), greaterThan(1));
+  });
+
+  test('step stays fast for ~150 nodes', () {
+    final rng = math.Random(11);
+    final radii = {for (var i = 0; i < 150; i++) 'n$i': 6.0 + rng.nextInt(12)};
+    final edges = <(String, String)>[
+      for (var i = 0; i < 200; i++)
+        ('n${rng.nextInt(150)}', 'n${rng.nextInt(150)}'),
+    ];
+    final layout = GraphLayout(radii: radii, edges: edges);
+    for (var i = 0; i < 5; i++) {
+      layout.step();
+    }
+    final sw = Stopwatch()..start();
+    for (var i = 0; i < 50; i++) {
+      layout.step();
+    }
+    sw.stop();
+    final avgMs = sw.elapsedMicroseconds / 1000 / 50;
+    // ignore: avoid_print
+    print('avg step: ${avgMs.toStringAsFixed(3)} ms');
+    expect(avgMs, lessThan(4));
+  });
 }
