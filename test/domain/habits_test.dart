@@ -232,9 +232,14 @@ void main() {
       pomodoros: 0,
     );
     final data = buildHabitDayData([e], const [], 4);
-    expect(data.trackedSecondsBySkillDay['s']![const LocalDay(2026, 11, 21)], 1800);
     expect(
-      data.trackedSecondsBySkillDay['s']!.containsKey(const LocalDay(2026, 11, 22)),
+      data.trackedSecondsBySkillDay['s']![const LocalDay(2026, 11, 21)],
+      1800,
+    );
+    expect(
+      data.trackedSecondsBySkillDay['s']!.containsKey(
+        const LocalDay(2026, 11, 22),
+      ),
       false,
     );
   });
@@ -243,7 +248,9 @@ void main() {
     final daily = habit('d', const DailySchedule());
     final wk = habit('w', const WeekdaysSchedule({1, 3, 5}));
     final tpw = habit('t', const TimesPerWeekSchedule(2));
-    final week = [for (var i = 0; i < 7; i++) const LocalDay(2026, 11, 9).addDays(i)];
+    final week = [
+      for (var i = 0; i < 7; i++) const LocalDay(2026, 11, 9).addDays(i),
+    ];
     HabitDayData build(Set<HabitCheck> c) => buildHabitDayData(const [], c, 0);
     final checks = <HabitCheck>{
       for (final d in week) HabitCheck(habitId: 'd', day: d),
