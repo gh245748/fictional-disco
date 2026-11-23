@@ -48,4 +48,16 @@ class HabitsRepo extends JsonRepo<Habit> {
 
     return txn != null ? run(txn) : db.database.transaction(run);
   }
+
+  /// Deletes the habit with all its checks.
+  Future<void> deleteWithChecks(String habitId) => db.database.transaction((
+    txn,
+  ) async {
+    await delete(habitId, txn: txn);
+    for (final c in await allChecks(txn: txn)) {
+      if (c.habitId == habitId) {
+        await MeskDb.habitChecks.record(checkKey(habitId, c.day)).delete(txn);
+      }
+    }
+  });
 }

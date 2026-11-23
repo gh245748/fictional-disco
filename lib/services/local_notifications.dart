@@ -74,6 +74,19 @@ List<PlannedNotification> planTimerNotifications(
   return out;
 }
 
+/// iOS keeps at most 64 pending local notifications. Habit reminders get 56
+/// of them (the rest is left for the timer's few notifications).
+const habitReminderBudget = 56;
+
+/// How many days ahead habit reminders are planned for [habitCount] habits
+/// with a reminder: the full week up to 8 habits, then fewer so that
+/// habits x days stays within [habitReminderBudget] (never below one day).
+int habitReminderDays(int habitCount) {
+  if (habitCount <= 0) return 7;
+  final days = habitReminderBudget ~/ habitCount;
+  return days.clamp(1, 7);
+}
+
 /// One reminder per scheduled, not-yet-done day for the next [days] days
 /// starting today. Reminder times are wall-clock times on the device.
 List<PlannedNotification> planHabitReminders(
@@ -220,7 +233,11 @@ class LocalNotificationService implements NotificationService {
     await _cancelRange(habitReminderIdBase, 1 << 30);
     final exact = await _safe(_plugin.canScheduleExact, false);
     final now = _now().toUtc();
-    for (final n in planHabitReminders(habits, today, data)) {
+    final withReminder = habits
+        .where((h) => h.archivedAt == null && h.reminderMinuteOfDay != null)
+        .length;
+    final days = habitReminderDays(withReminder);
+    for (final n in planHabitReminders(habits, today, data, days: days)) {
       if (!n.atUtc.isAfter(now)) continue;
       await _safe(
         () => _plugin.schedule(

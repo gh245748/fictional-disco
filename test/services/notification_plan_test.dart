@@ -105,6 +105,7 @@ class RecordingPlugin implements NotificationsPlugin {
 }
 
 void main() {
+  habitBudgetTests();
   test('timer plan copy and ids', () {
     final t0 = DateTime.utc(2026, 11, 23, 10);
     final plan = planTimerNotifications([
@@ -258,4 +259,25 @@ void main() {
       expect(plugin.cancelled, [1000, 1200, 1100]);
     },
   );
+}
+
+void habitBudgetTests() {
+  group('habit reminder budget', () {
+    test('up to seven habits keep the full seven days', () {
+      for (var n = 0; n <= 7; n++) {
+        expect(habitReminderDays(n), 7);
+      }
+    });
+
+    test('more habits shrink the window so habits x days <= 56', () {
+      expect(habitReminderDays(8), 7);
+      expect(habitReminderDays(9), 6);
+      expect(habitReminderDays(14), 4);
+      expect(habitReminderDays(56), 1);
+      expect(habitReminderDays(80), 1);
+      for (var n = 1; n <= 56; n++) {
+        expect(n * habitReminderDays(n), lessThanOrEqualTo(56));
+      }
+    });
+  });
 }

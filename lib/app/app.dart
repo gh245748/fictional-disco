@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../features/celebrations/celebration_host.dart';
 import '../features/focus/timer_controller.dart';
+import '../features/habits/habits_controller.dart';
 import '../ui/theme.dart';
 import 'providers.dart';
 import 'router.dart';
@@ -23,13 +24,27 @@ class _MeskAppState extends ConsumerState<MeskApp> {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onResume: _timerResumed);
+    _lifecycle = AppLifecycleListener(onResume: _resumed);
+    // Habit reminders are re-planned at launch; the plan only covers a few
+    // days ahead.
+    _rescheduleHabits();
   }
 
   @override
   void dispose() {
     _lifecycle.dispose();
     super.dispose();
+  }
+
+  Future<void> _resumed() async {
+    _rescheduleHabits();
+    await _timerResumed();
+  }
+
+  /// Re-plans the habit reminders (best effort; the controller swallows
+  /// notification errors).
+  void _rescheduleHabits() {
+    ref.read(habitsControllerProvider).rescheduleReminders();
   }
 
   /// Whatever tab is open: close the phases that ended while away (which
