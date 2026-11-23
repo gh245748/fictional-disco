@@ -59,3 +59,67 @@ class MeskPrimaryButton extends StatelessWidget {
     );
   }
 }
+
+/// The outlined pill button for secondary actions (min height 44).
+class MeskSecondaryButton extends StatelessWidget {
+  const MeskSecondaryButton({
+    super.key,
+    required this.label,
+    this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(label);
+    final i = icon;
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: MeskColors.accent,
+        disabledForegroundColor: MeskColors.faint,
+        side: const BorderSide(color: MeskColors.surfaceBorder),
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape: const StadiumBorder(),
+        textStyle: MeskPrimaryButton.textStyle,
+      ),
+      onPressed: onPressed,
+      child: i == null
+          ? text
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 8,
+              children: [Icon(i, size: 16), text],
+            ),
+    );
+  }
+}
+
+/// A text button at least 44 px tall, for dialogs and sheets.
+class MeskTextButton extends StatelessWidget {
+  const MeskTextButton(
+    this.label, {
+    super.key,
+    required this.onPressed,
+    this.color,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    onPressed: onPressed,
+    style: TextButton.styleFrom(
+      minimumSize: const Size(44, 44),
+      foregroundColor: color ?? MeskColors.accent,
+      textStyle: MeskPrimaryButton.textStyle,
+    ),
+    child: Text(label),
+  );
+}
