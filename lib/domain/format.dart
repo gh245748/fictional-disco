@@ -71,5 +71,8 @@ String formatPercent(double ratio) => '%${(ratio * 100).round()}';
 String formatDayMonth(DateTime local) =>
     DateFormat('d MMMM', 'tr').format(local);
 
+/// "21 Kasım 2026". Requires `initializeDateFormatting('tr')`.
+String formatDate(DateTime local) => DateFormat('d MMMM y', 'tr').format(local);
+
 /// "Cumartesi". Requires `initializeDateFormatting('tr')`.
 String formatWeekday(DateTime local) => DateFormat('EEEE', 'tr').format(local);

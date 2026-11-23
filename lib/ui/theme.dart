@@ -24,6 +24,9 @@ abstract final class MeskColors {
 
   /// Muted red for destructive actions.
   static const Color danger = Color(0xFFE08A73);
+
+  /// [bg] at 88 % behind celebration cards.
+  static const Color scrim = Color(0xE00E0D0C);
 }
 
 Color statColor(Stat s) => switch (s) {
@@ -60,6 +63,7 @@ abstract final class MeskType {
     fontSize: 40,
     height: 1.05,
     color: MeskColors.text,
+    fontFeatures: [FontFeature.liningFigures()],
   );
   static const TextStyle sectionTitle = TextStyle(
     fontFamily: serif,
@@ -67,6 +71,7 @@ abstract final class MeskType {
     fontSize: 24,
     height: 1.1,
     color: MeskColors.text,
+    fontFeatures: [FontFeature.liningFigures()],
   );
   static const TextStyle bigNumber = TextStyle(
     fontFamily: serif,

@@ -60,5 +60,6 @@ void main() {
   test('dates', () {
     expect(formatDayMonth(DateTime(2026, 11, 21)), '21 Kasım');
     expect(formatWeekday(DateTime(2026, 11, 21)), 'Cumartesi');
+    expect(formatDate(DateTime(2026, 11, 21)), '21 Kasım 2026');
   });
 }
