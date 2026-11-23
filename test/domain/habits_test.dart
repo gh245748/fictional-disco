@@ -3,7 +3,7 @@ import 'package:mesk/domain/day.dart';
 import 'package:mesk/domain/habits.dart';
 import 'package:mesk/domain/models.dart';
 
-const today = const LocalDay(2026, 11, 21); // Saturday
+const today = LocalDay(2026, 11, 21); // Saturday
 
 Habit habit(
   String id,
@@ -232,9 +232,9 @@ void main() {
       pomodoros: 0,
     );
     final data = buildHabitDayData([e], const [], 4);
-    expect(data.trackedSecondsBySkillDay['s']![LocalDay(2026, 11, 21)], 1800);
+    expect(data.trackedSecondsBySkillDay['s']![const LocalDay(2026, 11, 21)], 1800);
     expect(
-      data.trackedSecondsBySkillDay['s']!.containsKey(LocalDay(2026, 11, 22)),
+      data.trackedSecondsBySkillDay['s']!.containsKey(const LocalDay(2026, 11, 22)),
       false,
     );
   });
