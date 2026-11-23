@@ -33,3 +33,21 @@ import 'package:mesk/domain/stats.dart';
     {for (final r in rows) r.$1: r.$5},
   );
 }
+
+/// The 14 links of the approved mockup graph (skill id pairs).
+const List<(String, String)> mockupLinks = [
+  ('ingilizce', 'hitabet'),
+  ('okuma', 'hitabet'),
+  ('ingilizce', 'okuma'),
+  ('ingilizce', 'yazilim'),
+  ('okuma', 'yazilim'),
+  ('yazilim', 'satranc'),
+  ('okuma', 'gunluk-yazma'),
+  ('gitar', 'muzik-teorisi'),
+  ('cizim', 'gunluk-yazma'),
+  ('gunluk-yazma', 'meditasyon'),
+  ('meditasyon', 'yoga'),
+  ('yoga', 'fitness'),
+  ('fitness', 'kosu'),
+  ('kosu', 'meditasyon'),
+];
