@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../data/kv_repo.dart';
 import '../../data/skills_repo.dart';
+import '../../domain/format.dart';
 import '../../domain/models.dart';
 import '../../domain/stats.dart';
 import '../../ui/theme.dart';
@@ -142,6 +143,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         customSkills: _custom,
       );
       if (mounted) context.go('/bugun');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kaydedilemedi, tekrar dene.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _finishing = false);
     }
@@ -149,8 +156,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _addCustom() async {
     final taken = {
-      for (final t in skillTemplates) t.name.toLowerCase(),
-      for (final c in _custom) c.name.toLowerCase(),
+      for (final t in skillTemplates) trLower(t.name),
+      for (final c in _custom) trLower(c.name),
     };
     final skill = await showModalBottomSheet<CustomSkill>(
       context: context,
@@ -473,7 +480,7 @@ class _CustomSkillSheetState extends State<_CustomSkillSheet> {
   }
 
   String get _trimmed => _name.text.trim();
-  bool get _duplicate => widget.taken.contains(_trimmed.toLowerCase());
+  bool get _duplicate => widget.taken.contains(trLower(_trimmed));
   bool get _valid => _trimmed.isNotEmpty && !_duplicate;
 
   @override

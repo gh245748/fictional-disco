@@ -155,6 +155,21 @@ void main() {
     expect(_location(t), '/bugun');
   });
 
+  testWidgets('custom skill duplicate is Turkish-aware', (t) async {
+    final db = await _freshDb(t);
+    await _pumpApp(t, db);
+    await _toSkillsPage(t);
+    await _tap(t, find.text('Kendi yeteneğini ekle'));
+    await t.enterText(find.byType(TextField), 'ingilizce');
+    await t.pumpAndSettle();
+    expect(find.text('Bu yetenek zaten listede'), findsOneWidget);
+    final add = find.ancestor(
+      of: find.text('Ekle'),
+      matching: find.byType(FilledButton),
+    );
+    expect(t.widget<FilledButton>(add).onPressed, isNull);
+  });
+
   testWidgets('permission denied still completes', (t) async {
     final db = await _freshDb(t);
     final fake = FakeNotificationService(permissionGranted: false);
