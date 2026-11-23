@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../features/entries/entry_form_screen.dart';
+import '../features/focus/focus_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/settings/presets_screen.dart';
 import '../features/skills/skill_detail_screen.dart';
 import '../features/skills/skill_edit_screen.dart';
 import '../features/skills/skills_screen.dart';
@@ -72,7 +74,16 @@ GoRouter buildRouter(Ref ref) {
         branches: [
           tab('/bugun', 'Bugün'),
           tab('/yetenekler', 'Yetenekler', screen: SkillsScreen.new),
-          tab('/odak', 'Odak'),
+          // Query parameter: `skill` (skill id to preselect).
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/odak',
+                builder: (_, state) =>
+                    FocusScreen(skillId: state.uri.queryParameters['skill']),
+              ),
+            ],
+          ),
           tab('/ag', 'Ağ'),
           tab('/karakter', 'Karakter'),
         ],
@@ -119,7 +130,18 @@ GoRouter buildRouter(Ref ref) {
         '/ayarlar',
         'Ayarlar',
         routes: [
-          page('setler', 'Pomodoro setleri', routes: [page(':id', 'Set')]),
+          GoRoute(
+            path: 'setler',
+            builder: (_, _) => const PresetsScreen(),
+            routes: [
+              // `:id` is a preset id, or `yeni` for a new set.
+              GoRoute(
+                path: ':id',
+                builder: (_, state) =>
+                    PresetEditScreen(presetId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
         ],
       ),
     ],
