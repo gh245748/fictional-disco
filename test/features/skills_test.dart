@@ -268,6 +268,16 @@ void main() {
     expect(find.text('Hitabet ve bütün kayıtları silinecek.'), findsOneWidget);
   });
 
+  testWidgets('delete confirmation says its habits are deleted too', (t) async {
+    final db = await _demoDb(t);
+    await _pumpApp(t, db, '/yetenekler/ingilizce/duzenle');
+    await _tap(t, find.text('Sil'));
+    expect(
+      find.textContaining('Bağlı 1 alışkanlık da silinecek.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('backup button leads to settings', (t) async {
     final db = await _demoDb(t);
     await _pumpApp(t, db, '/yetenekler/okuma/duzenle');

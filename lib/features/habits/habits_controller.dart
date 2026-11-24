@@ -40,7 +40,7 @@ class HabitsController {
     final h = await _habits.get(habitId);
     if (h == null || h.kind != HabitKind.simple) return _nothing;
     final today = await _today();
-    final created = dayOfInstant(h.createdAt, 0, 0);
+    final created = habitCreatedDay(h);
     if (day.compareTo(today) > 0 || day.compareTo(created) < 0) {
       return _nothing;
     }

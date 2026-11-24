@@ -548,6 +548,7 @@ class Habit {
     required this.schedule,
     this.reminderMinuteOfDay,
     required this.createdAt,
+    this.createdDay,
     this.archivedAt,
   });
 
@@ -562,6 +563,7 @@ class Habit {
     ),
     reminderMinuteOfDay: j['reminderMinuteOfDay'] as int?,
     createdAt: _dt(j['createdAt']),
+    createdDay: _dayN(j['createdDay']),
     archivedAt: _dtN(j['archivedAt']),
   );
 
@@ -573,11 +575,17 @@ class Habit {
   final HabitSchedule schedule;
   final int? reminderMinuteOfDay;
   final DateTime createdAt;
+
+  /// The logical day (honouring the day start) the habit was made on. Null
+  /// for habits saved before it existed; they fall back to the UTC date of
+  /// [createdAt].
+  final LocalDay? createdDay;
   final DateTime? archivedAt;
 
   Habit copyWith({
     String? name,
     HabitKind? kind,
+    Object? createdDay = _keep,
     Object? skillId = _keep,
     Object? targetMinutes = _keep,
     HabitSchedule? schedule,
@@ -595,6 +603,7 @@ class Habit {
       this.reminderMinuteOfDay,
     ),
     createdAt: createdAt,
+    createdDay: _pick<LocalDay>(createdDay, this.createdDay),
     archivedAt: _pick<DateTime>(archivedAt, this.archivedAt),
   );
 
@@ -607,6 +616,7 @@ class Habit {
     'schedule': schedule.toJson(),
     'reminderMinuteOfDay': reminderMinuteOfDay,
     'createdAt': _iso(createdAt),
+    'createdDay': createdDay?.toIso(),
     'archivedAt': _isoN(archivedAt),
   };
 
@@ -621,6 +631,7 @@ class Habit {
       other.schedule == schedule &&
       other.reminderMinuteOfDay == reminderMinuteOfDay &&
       other.createdAt == createdAt &&
+      other.createdDay == createdDay &&
       other.archivedAt == archivedAt;
 
   @override
@@ -633,6 +644,7 @@ class Habit {
     schedule,
     reminderMinuteOfDay,
     createdAt,
+    createdDay,
     archivedAt,
   );
 }

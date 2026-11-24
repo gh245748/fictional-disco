@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/providers.dart';
+import '../../domain/day.dart';
 import '../../domain/format.dart';
 import '../../domain/models.dart';
 import '../../ui/theme.dart';
@@ -155,6 +156,8 @@ class _HabitFormState extends ConsumerState<_HabitForm> {
   Future<void> _save() => _run(() async {
     final timed = _kind == HabitKind.timed;
     final existing = widget.habit;
+    final clock = ref.read(clockProvider);
+    final dayStart = ref.read(settingsProvider).value?.dayStartHour ?? 0;
     final habit = existing == null
         ? Habit(
             id: newId(),
@@ -164,7 +167,8 @@ class _HabitFormState extends ConsumerState<_HabitForm> {
             targetMinutes: timed ? _targetMinutes : null,
             schedule: _schedule,
             reminderMinuteOfDay: _reminder,
-            createdAt: ref.read(clockProvider).nowUtc(),
+            createdAt: clock.nowUtc(),
+            createdDay: todayOf(clock, dayStart),
           )
         : existing.copyWith(
             name: _name.text.trim(),

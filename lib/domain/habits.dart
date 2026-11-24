@@ -41,7 +41,11 @@ LocalDay _dayOfUtc(DateTime t) {
   return LocalDay(u.year, u.month, u.day);
 }
 
-LocalDay _createdDay(Habit h) => _dayOfUtc(h.createdAt);
+/// The first day the habit can be done on: the logical day it was made on,
+/// or the UTC date of its creation for habits saved without one.
+LocalDay habitCreatedDay(Habit h) => h.createdDay ?? _dayOfUtc(h.createdAt);
+
+LocalDay _createdDay(Habit h) => habitCreatedDay(h);
 
 /// Whether [d] is a scheduled day. Times-per-week habits may be done on any
 /// day, so every day counts as scheduled for them.

@@ -203,6 +203,9 @@ class _SkillFormState extends ConsumerState<_SkillForm> {
   Future<void> _delete() async {
     final skill = widget.skill!;
     final bonus = await ref.read(pipelineProvider).bonusGivenBySkill(skill.id);
+    final habitCount = await ref
+        .read(skillsControllerProvider)
+        .habitCountOf(skill.id);
     if (!mounted) return;
     final choice = await showDialog<_DeleteChoice>(
       context: context,
@@ -217,7 +220,9 @@ class _SkillFormState extends ConsumerState<_SkillForm> {
             Text(
               '${skill.name} ve bütün kayıtları silinecek.'
               '${bonus > 0 ? ' Bağlı yeteneklerden ${formatDuration(bonus)} '
-                        'bonus da silinecek.' : ''}',
+                        'bonus da silinecek.' : ''}'
+              '${habitCount > 0 ? ' Bağlı $habitCount alışkanlık da '
+                        'silinecek.' : ''}',
               style: MeskType.body14.copyWith(fontWeight: FontWeight.w400),
             ),
             const Text(

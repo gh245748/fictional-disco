@@ -101,6 +101,13 @@ class SkillsController {
         h,
   ];
 
+  /// How many habits (active or archived) are tied to the skill; deleting
+  /// the skill deletes them with their checks.
+  Future<int> habitCountOf(String skillId) async => [
+    for (final h in await _habits.all())
+      if (h.skillId == skillId) h,
+  ].length;
+
   /// Archives the skill and its active timed habits (§5.9).
   Future<void> archive(String id) async {
     final now = clock.nowUtc();

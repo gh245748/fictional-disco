@@ -5,6 +5,7 @@ import 'package:mesk/app/app.dart';
 import 'package:mesk/app/providers.dart';
 import 'package:mesk/data/db.dart';
 import 'package:mesk/data/habits_repo.dart';
+import 'package:mesk/data/kv_repo.dart';
 import 'package:mesk/data/log_pipeline.dart';
 import 'package:mesk/domain/day.dart';
 import 'package:mesk/domain/habits.dart';
@@ -142,6 +143,27 @@ void main() {
         [],
       );
       expect(_reminderCalls(rec), 2);
+    });
+
+    test('toggle accepts the logical day a habit was made on', () async {
+      // Made at 03:30 local on the 21st with the day starting at 04:00: the
+      // logical day is still the 20th, but the UTC date is already the 21st.
+      final clock = FixedClock(DateTime.utc(2026, 11, 21, 0, 30));
+      final kv = KvRepo(db);
+      await kv.saveSettings((await kv.settings()).copyWith(dayStartHour: 4));
+      await HabitsRepo(db).put(
+        _simple(
+          'h-gece',
+          'Gece',
+          createdAt: DateTime.utc(2026, 11, 21, 0, 30),
+        ).copyWith(createdDay: const LocalDay(2026, 11, 20)),
+      );
+      final night = HabitsController(db, clock, LogPipeline(db, clock), rec);
+      await night.toggle('h-gece', const LocalDay(2026, 11, 20));
+      expect(
+        (await HabitsRepo(db).allChecks()).where((c) => c.habitId == 'h-gece'),
+        hasLength(1),
+      );
     });
 
     test(

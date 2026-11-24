@@ -121,6 +121,16 @@ void main() {
     );
     roundTrip(h, Habit.fromJson, (x) => x.toJson());
     roundTrip(
+      h.copyWith(createdDay: const LocalDay(2026, 11, 22)),
+      Habit.fromJson,
+      (x) => x.toJson(),
+    );
+    // A habit saved before createdDay existed still reads.
+    expect(
+      Habit.fromJson({...h.toJson()}..remove('createdDay')).createdDay,
+      isNull,
+    );
+    roundTrip(
       Habit(
         id: 'h',
         name: 'Su',

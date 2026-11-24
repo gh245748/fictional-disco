@@ -219,6 +219,24 @@ void main() {
     expect(isCompletedOn(h, today.addDays(-1), data), false);
   });
 
+  test('a habit made after midnight but before day start counts that day', () {
+    // 03:30 local (UTC+3, day starts at 04:00) is 00:30 UTC on the 21st, but
+    // the logical day is still the 20th.
+    final h = habit(
+      'h',
+      const DailySchedule(),
+      createdAt: DateTime.utc(2026, 11, 21, 0, 30),
+    ).copyWith(createdDay: const LocalDay(2026, 11, 20));
+    final data = checksData('h', [const LocalDay(2026, 11, 20)]);
+    expect(isCompletedOn(h, const LocalDay(2026, 11, 20), data), isTrue);
+    expect(habitCreatedDay(h), const LocalDay(2026, 11, 20));
+    // Without the stored day the UTC date is the fallback.
+    expect(
+      habitCreatedDay(h.copyWith(createdDay: null)),
+      const LocalDay(2026, 11, 21),
+    );
+  });
+
   test('day start hour moves late entries to previous day', () {
     // 03:30 local (+03:00) on 2026-11-22 is 00:30 UTC.
     final e = TimeEntry(

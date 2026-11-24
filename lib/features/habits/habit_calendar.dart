@@ -30,7 +30,7 @@ LocalDay _utcDay(DateTime t) {
 /// is not due: before it existed, after it was archived, or on a day outside
 /// its weekdays.
 double? habitDayRatio(Habit h, LocalDay d, HabitDayData data) {
-  if (d.compareTo(_utcDay(h.createdAt)) < 0) return null;
+  if (d.compareTo(habitCreatedDay(h)) < 0) return null;
   final archived = h.archivedAt;
   if (archived != null && d.compareTo(_utcDay(archived)) > 0) return null;
   if (!isScheduledOn(h, d)) return null;

@@ -95,6 +95,7 @@ class GoalsController {
       targetMinutes: minutes,
       schedule: const DailySchedule(),
       createdAt: clock.nowUtc(),
+      createdDay: todayOf(clock, settings.dayStartHour),
     );
     return (habit.id, await habits.save(habit));
   }
