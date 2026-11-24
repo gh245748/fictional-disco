@@ -13,6 +13,7 @@ import '../../ui/widgets/mesk_card.dart';
 import '../celebrations/celebration_host.dart';
 import '../habits/habits_controller.dart';
 import 'backup_actions.dart';
+import 'testflight_reminder.dart';
 
 /// Shown in "Hakkında"; keep in step with `version:` in pubspec.yaml.
 const String appVersion = '0.1.0';
@@ -169,6 +170,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
               children: [
+                const TestflightReminder(bottomGap: 16),
                 MeskCard(
                   padding: EdgeInsets.zero,
                   onTap: () => context.push('/ayarlar/setler'),

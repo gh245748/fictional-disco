@@ -14,6 +14,7 @@ import '../../ui/widgets/section_header.dart';
 import '../../ui/widgets/stat_dot.dart';
 import '../goals/goal_card.dart';
 import '../habits/habit_row.dart';
+import '../settings/testflight_reminder.dart';
 import '../skills/skills_screen.dart';
 import 'backup_reminder.dart';
 import 'character_card.dart';
@@ -60,6 +61,8 @@ class TodayScreen extends ConsumerWidget {
               spacing: 10,
               children: [
                 _Header(today.toDateTime()),
+                if (ref.watch(testflightLeftProvider) != null)
+                  const TestflightReminder(),
                 const BackupReminder(),
                 CharacterCard(character),
                 FocusCard(
