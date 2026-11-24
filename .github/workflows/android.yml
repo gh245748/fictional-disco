@@ -28,12 +28,16 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+            if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+              echo "::error::ANDROID_KEYSTORE_BASE64 tanımlı ama ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS veya ANDROID_KEY_PASSWORD eksik. Dördünü de ekleyin."
+              exit 1
+            fi
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             {
               echo "storePassword=$KEYSTORE_PASSWORD"
               echo "keyPassword=$KEY_PASSWORD"
               echo "keyAlias=$KEY_ALIAS"
-              echo "storeFile=release.jks"
+              echo "storeFile=$RUNNER_TEMP/release.jks"
             } > android/key.properties
           else
             echo "ANDROID_KEYSTORE_BASE64 tanımlı değil; debug imzası kullanılacak."
@@ -48,3 +52,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
+      - name: Anahtarı sil
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks" android/key.properties

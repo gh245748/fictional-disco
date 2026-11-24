@@ -4,6 +4,8 @@ Telefona kurulan her Android uygulaması bir anahtarla imzalanır. Meşk'in gün
 
 Anahtar tanımlamazsanız APK yine derlenir (geçici "debug" anahtarıyla). Telefonunuza kurup denemek için bu yeterlidir; ama anahtar sonradan değişirse aşağıdaki "Anahtarı değiştirmek" bölümü geçerli olur.
 
+**Önemli:** Aşağıdaki dört gizli değeri eklemezseniz her yeni APK farklı bir geçici anahtarla imzalanır ve öncekinin üstüne kurulmaz. Her yeni APK için sırayla yedek almanız, eski uygulamayı kaldırmanız, yenisini kurmanız ve yedeği geri yüklemeniz gerekir. Bu yüzden gerçek kullanımdan önce anahtarı kurun.
+
 ## 1. Anahtarı oluşturun
 
 Bilgisayarınızda (Java kurulu olmalı) bir terminal açıp şunu çalıştırın:
