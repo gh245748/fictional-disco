@@ -180,7 +180,7 @@ const List<String> levelDescriptions = [
   'Başkalarına yol gösterecek kadar biliyor, bunu sabırla yapıyorsun.',
   'Yeni yollar açıyor, ilk adımı atmaktan çekinmeden öne geçiyorsun.',
   'Karanlıkta kalanlara ışık tutuyor, doğru yolu gösteriyorsun.',
-  'Ustalık eşiğindesin; kalfalık geride kaldı, artık bu iş sana ait.',
+  'Usta oldun; kalfalık geride kaldı, artık bu iş sana ait.',
   'Bilgin ve becerinle başkalarına ders verecek noktadasın.',
   'Alanının sözü dinlenen, saygı duyulan ismisin.',
   'Bildiklerini planlı bir yapıya dönüştürüyor, eserini inşa ediyorsun.',

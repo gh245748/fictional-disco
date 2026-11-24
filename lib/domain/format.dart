@@ -8,7 +8,7 @@ String trUpper(String s) =>
 String trLower(String s) =>
     s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
 
-const String _alphabet = 'abcçdefgğhıijklmnoöprsştuüvyz';
+const String _alphabet = 'abcçdefgğhıijklmnoöpqrsştuüvwxyz';
 
 /// Compares two strings using the Turkish alphabet, case-insensitively.
 /// Characters outside the alphabet fall back to code-unit order.

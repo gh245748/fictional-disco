@@ -56,6 +56,11 @@ void main() {
     }
   });
 
+  test('the level 50 card celebrates having become a master', () {
+    expect(descriptionForLevel(50), isNot(contains('eşiğindesin')));
+    expect(descriptionForLevel(50), startsWith('Usta oldun'));
+  });
+
   test('hidden tier names never appear in level titles or descriptions', () {
     String lower(String s) =>
         s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();

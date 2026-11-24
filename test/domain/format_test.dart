@@ -43,6 +43,36 @@ void main() {
     expect(['ö', 'z', 'é']..sort(trCompare), ['é', 'ö', 'z']);
   });
 
+  test('trCompare places q, w and x inside the alphabet', () {
+    expect(
+      [
+        'Zihin',
+        'Web tasarımı',
+        'Akıl',
+        'Wushu',
+        'Xilofon',
+        'Quiz',
+        'Vatan',
+        'Yol',
+      ]..sort(trCompare),
+      [
+        'Akıl',
+        'Quiz',
+        'Vatan',
+        'Web tasarımı',
+        'Wushu',
+        'Xilofon',
+        'Yol',
+        'Zihin',
+      ],
+    );
+    expect(trCompare('p', 'q'), lessThan(0));
+    expect(trCompare('q', 'r'), lessThan(0));
+    expect(trCompare('v', 'w'), lessThan(0));
+    expect(trCompare('x', 'y'), lessThan(0));
+    expect(trCompare('w', 'x'), lessThan(0));
+  });
+
   test('durations and hours', () {
     expect(formatDuration(59), '0 dk');
     expect(formatDuration(60), '1 dk');
