@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: macos-latest
@@ -41,11 +43,6 @@ jobs:
     needs: [build, preflight]
     if: needs.preflight.outputs.has_asc == 'true'
     runs-on: macos-latest
-    env:
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -53,14 +50,34 @@ jobs:
           flutter-version: 3.50.1
           channel: stable
       - run: flutter pub get
+      - name: Gizli değerleri denetle
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=""
+          for n in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_BASE64 APPLE_TEAM_ID; do
+            if [ -z "${!n}" ]; then missing="$missing $n"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Eksik GitHub secret:$missing. Dört değerin hepsi gerekli / All four secrets are required."
+            exit 1
+          fi
       - name: App Store Connect anahtarını yaz
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
         run: |
           printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           chmod 600 "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
       - name: Takım kimliğini yaz
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # Proje ayarına (DEVELOPMENT_TEAM) ve dışa aktarma ayarına (teamID).
-          echo "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" >> ios/Flutter/Release.xcconfig
+          printf '\nDEVELOPMENT_TEAM=%s\n' "$APPLE_TEAM_ID" >> ios/Flutter/Release.xcconfig
           /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ios/ExportOptions.plist
       - name: Flutter ayarlarını hazırla
         run: >-
@@ -68,6 +85,9 @@ jobs:
           --dart-define=MESK_BUILD_DATE=$(date -u +%F)
           --build-number ${{ github.run_number }}
       - name: Arşivle
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: >-
           xcodebuild archive
           -workspace ios/Runner.xcworkspace
@@ -80,6 +100,9 @@ jobs:
           -authenticationKeyID "$ASC_KEY_ID"
           -authenticationKeyIssuerID "$ASC_ISSUER_ID"
       - name: Dışa aktar ve TestFlight'a yükle
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: >-
           xcodebuild -exportArchive
           -archivePath "$RUNNER_TEMP/Runner.xcarchive"

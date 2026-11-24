@@ -8,6 +8,7 @@ import 'package:mesk/data/habits_repo.dart';
 import 'package:mesk/data/kv_repo.dart';
 import 'package:mesk/domain/models.dart';
 import 'package:mesk/features/focus/focus_screen.dart';
+import 'package:mesk/features/settings/testflight_reminder.dart';
 import 'package:mesk/features/today/backup_reminder.dart';
 import 'package:mesk/features/today/today_screen.dart';
 
@@ -160,6 +161,30 @@ void main() {
     expect(find.textContaining('Son yedeğin'), findsNothing);
     final saved = t.container().read(settingsProvider).value!;
     expect(saved.backupReminderDismissedAt, demoClock().nowUtc());
+  });
+
+  testWidgets('TestFlight expiry card shows when due and hides when not', (
+    t,
+  ) async {
+    const text =
+        'Bu TestFlight sürümü 5 gün içinde sona erecek. Yeni bir sürüm yükle.';
+    final db = await openTestDb(t);
+    await pumpMeskApp(
+      t,
+      db,
+      '/bugun',
+      overrides: [testflightLeftProvider.overrideWithValue(5)],
+    );
+    expect(find.text(text), findsOneWidget);
+
+    final db2 = await openTestDb(t);
+    await pumpMeskApp(
+      t,
+      db2,
+      '/bugun',
+      overrides: [testflightLeftProvider.overrideWithValue(null)],
+    );
+    expect(find.text(text), findsNothing);
   });
 
   testWidgets('no backup yet also shows the reminder', (t) async {

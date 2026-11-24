@@ -27,7 +27,7 @@ Gerekenler: bir Mac gerekmez. Bir iPhone, bir Apple kimliği (Apple ID) ve yıll
 
 1. App Store Connect'te "Users and Access" (Kullanıcılar ve Erişim) bölümüne, oradan "Integrations" (Entegrasyonlar) sekmesine, sonra "App Store Connect API" bölümüne git.
 2. "Generate API Key" (veya "+") düğmesine bas.
-3. Ad olarak "Mesk GitHub" yaz, erişim olarak **App Manager** seç ve oluştur.
+3. Ad olarak "Mesk GitHub" yaz, erişim olarak **Admin** seç ve oluştur. (Admin gerekir: GitHub'daki derleme, imza sertifikasını senin adına Apple'dan otomatik oluşturur ve App Manager yetkisi buna her zaman yetmez.) Bu anahtar çok güçlüdür: gizli tut, kimseyle paylaşma. Şüphelendiğin an aynı sayfadan "Revoke" (İptal et) ile iptal edebilirsin; yenisini oluşturup 4. adımdaki değerleri güncellersin.
 4. Açılan listede şu iki değeri not al:
    - **Issuer ID**: sayfanın üstünde, uzun bir kod (örneğin 69a6de80-...). Bu, 4. adımdaki `ASC_ISSUER_ID` olacak.
    - **Key ID**: yeni anahtarın satırında, 10 karakterlik kod. Bu, `ASC_KEY_ID` olacak.
@@ -59,16 +59,19 @@ Bu değerler gizlidir: GitHub bir daha göstermez, kimseye göndermene gerek yok
 1. Deponun "Actions" sekmesini aç.
 2. Soldaki listeden **iOS**'u seç.
 3. Sağdaki "Run workflow" düğmesine, sonra yeşil "Run workflow" düğmesine bas.
-4. Yaklaşık 15–25 dakika bekle. Yeşil tik çıkınca derleme tamam ve TestFlight'a yüklenmiş demektir. Kırmızı çarpı çıkarsa işin adına tıkla ve hatayı bana göster.
+4. Yaklaşık 15–25 dakika bekle. Yeşil tik çıkınca derleme tamam ve TestFlight'a yüklenmiş demektir. Kırmızı çarpı çıkarsa işin adına tıkla ve hatanın ekran görüntüsünü uygulamayı geliştiren kişiye gönder.
 5. Yükleme bittikten sonra Apple birkaç dakika "işleme" yapar. App Store Connect'te uygulamanın "TestFlight" sekmesinde derlemenin görünmesini bekle.
-6. İlk seferde Apple "Export Compliance" sorabilir. Uygulama şifreleme kullanmıyorsa "None of the algorithms mentioned above" seçeneğini işaretle.
+6. Uygulama özel bir şifreleme kullanmadığı için Apple'ın "Export Compliance" sorusu çıkmaz; ayar uygulamanın içinde hazırdır. Yine de sorarsa "None of the algorithms mentioned above" seçeneğini işaretle.
 
-## 6. iPhone'a TestFlight'ı kur ve derlemeyi kabul et
+## 6. Kendini test kullanıcısı yap, TestFlight'ı kur ve derlemeyi kabul et
 
-1. App Store'dan **TestFlight** uygulamasını indir.
-2. App Store Connect'te "Users and Access" bölümünden kendi Apple kimliğinin bir "Internal Tester" (dahili test kullanıcısı) olduğundan emin ol. Hesabı açan kişi olarak zaten öylesin; değilsen kendini ekle.
-3. TestFlight'ı aç, aynı Apple kimliğiyle giriş yap. Meşk listede görünecek.
-4. "Install" (Kur) düğmesine bas.
+1. App Store Connect'te uygulamanı aç ve üstteki **TestFlight** sekmesine git.
+2. Solda "Internal Testing" (Dahili Test) yanındaki artı düğmesine bas ve bir grup oluştur (adı "Ben" olabilir).
+3. Grubun içinde "Testers" bölümünden kendi Apple kimliğini ekle. Seni e-postayla davet eder.
+4. Grup ayarlarında yeni derlemelerin otomatik dağıtılması (automatic distribution) seçeneğini aç. Böylece sonraki sürümler sana kendiliğinden gelir.
+5. iPhone'una App Store'dan **TestFlight** uygulamasını indir.
+6. E-postadaki daveti iPhone'unda aç (ya da TestFlight'ı aç ve aynı Apple kimliğiyle giriş yap). Meşk listede görünecek.
+7. "Install" (Kur) düğmesine bas.
 
 ## 7. 90 gün dolmadan yeni sürüm yükle
 
