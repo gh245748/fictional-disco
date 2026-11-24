@@ -179,6 +179,33 @@ void main() {
     );
   });
 
+  test('a weekly habit at its target is not reminded for the rest of the week', () {
+    final weekly = habit('Spor', const TimesPerWeekSchedule(2));
+    // No check yet: every day of the window.
+    expect(planHabitReminders([weekly], today, data()), hasLength(7));
+
+    // One of two done on Monday: Tuesday to Sunday still remind.
+    final one = planHabitReminders(
+      [weekly],
+      today,
+      data({
+        'Spor': {today},
+      }),
+    );
+    expect(one, hasLength(6));
+
+    // Monday and Tuesday done: the target is met, so Wednesday to Sunday stay
+    // quiet. From Tuesday the window ends on next Monday, which reminds again.
+    final met = planHabitReminders(
+      [weekly],
+      today.addDays(1),
+      data({
+        'Spor': {today, today.addDays(1)},
+      }),
+    );
+    expect(met.map((n) => n.atUtc), [DateTime(2026, 11, 30, 8, 30).toUtc()]);
+  });
+
   test('service methods never throw when permission denied', () async {
     final service = LocalNotificationService(ThrowingPlugin());
     expect(await service.requestPermission(), isFalse);

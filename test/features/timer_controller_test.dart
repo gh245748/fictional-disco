@@ -10,6 +10,7 @@ import 'package:mesk/domain/habits.dart';
 import 'package:mesk/domain/models.dart';
 import 'package:mesk/domain/timer_machine.dart';
 import 'package:mesk/features/focus/timer_controller.dart';
+import 'package:mesk/features/skills/skills_controller.dart';
 import 'package:mesk/services/notifications.dart';
 
 import '../support/demo_data.dart';
@@ -143,6 +144,19 @@ const _autoAll = TimerPreset(
 );
 
 void main() {
+  test('deleting the skill being timed ends the shown session', () async {
+    final notes = _RecordingNotifications();
+    final env = await _setup(notes);
+    await env.ctl.start(mode: TimerMode.free, skillId: 'okuma');
+    expect(env.state.status, TimerStatus.running);
+
+    await env.container.read(skillsControllerProvider).delete('okuma');
+    expect(env.state.status, TimerStatus.idle);
+    expect(notes.calls, contains('cancelTimer'));
+    // Finishing now is a clean error, not a half-state.
+    await expectLater(env.ctl.finishAndSave(), throwsStateError);
+  });
+
   test('start persists and schedules boundaries', () async {
     final notes = _RecordingNotifications();
     final env = await _setup(notes);

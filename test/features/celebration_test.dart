@@ -5,12 +5,15 @@ import 'package:material_ui/material_ui.dart';
 import 'package:mesk/app/providers.dart';
 import 'package:mesk/data/kv_repo.dart';
 import 'package:mesk/data/log_pipeline.dart';
+import 'package:mesk/domain/day.dart';
+import 'package:mesk/domain/habits.dart';
 import 'package:mesk/domain/level_curve.dart';
 import 'package:mesk/domain/level_events.dart';
 import 'package:mesk/domain/models.dart';
 import 'package:mesk/features/celebrations/cards.dart';
 import 'package:mesk/features/celebrations/celebration_host.dart';
 import 'package:mesk/features/skills/skill_detail_screen.dart';
+import 'package:mesk/services/notifications.dart';
 
 import '../support/app_harness.dart';
 import '../support/demo_data.dart';
@@ -66,6 +69,22 @@ class _Runner extends ConsumerWidget {
   );
 }
 
+/// Keeps the data every habit reminder plan was made from.
+class _PlanRecorder extends FakeNotificationService {
+  final List<({List<Habit> habits, LocalDay today, HabitDayData data})> plans =
+      [];
+
+  @override
+  Future<void> scheduleHabitReminders(
+    List<Habit> habits,
+    LocalDay today,
+    HabitDayData data,
+  ) async {
+    plans.add((habits: habits, today: today, data: data));
+    await super.scheduleHabitReminders(habits, today, data);
+  }
+}
+
 void main() {
   testWidgets('multi-level combined card', (t) async {
     final db = await openTestDb(t);
@@ -113,6 +132,44 @@ void main() {
     await t.tap(find.text('Çalıştır'));
     await t.pumpAndSettle();
     expect(find.text('Sv. 5 → 7'), findsOneWidget);
+  });
+
+  testWidgets('runAndCelebrate re-plans habit reminders from the new data', (
+    t,
+  ) async {
+    final db = await openTestDb(t);
+    final notes = _PlanRecorder();
+    await pumpPhone(
+      t,
+      CelebrationHost(
+        child: _Runner(
+          // Thirty minutes of English completes the timed habit "İngilizce".
+          (ref) => ref
+              .read(pipelineProvider)
+              .saveEntry(
+                TimeEntry(
+                  id: 'ing-sonra',
+                  skillId: 'ingilizce',
+                  startedAt: DateTime.utc(2026, 11, 21, 15),
+                  endedAt: DateTime.utc(2026, 11, 21, 16),
+                  offsetMinutes: 180,
+                  seconds: 3600,
+                  source: EntrySource.pomodoro,
+                  pomodoros: 2,
+                ),
+              ),
+        ),
+      ),
+      overrides: appOverrides(db, demoClock(), notifications: notes),
+    );
+    expect(notes.plans, isEmpty);
+    await t.tap(find.text('Çalıştır'));
+    await t.pumpAndSettle();
+
+    expect(notes.plans, hasLength(1));
+    final plan = notes.plans.single;
+    final english = plan.habits.firstWhere((h) => h.skillId == 'ingilizce');
+    expect(isCompletedOn(english, plan.today, plan.data), isTrue);
   });
 
   testWidgets('single level shows only the new level', (t) async {

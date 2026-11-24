@@ -105,6 +105,12 @@ List<PlannedNotification> planHabitReminders(
       final day = today.addDays(i);
       if (!isScheduledOn(h, day)) continue;
       if (i == 0 && isCompletedOn(h, day, data)) continue;
+      // A weekly target that is met needs no more nudges that week.
+      final schedule = h.schedule;
+      if (schedule is TimesPerWeekSchedule &&
+          weekCompletions(h, day, data) >= schedule.times) {
+        continue;
+      }
       out.add(
         PlannedNotification(
           id: habitReminderIdBase + slot * 10 + i,

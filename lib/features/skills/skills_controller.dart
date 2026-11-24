@@ -11,20 +11,32 @@ import '../../domain/day.dart';
 import '../../domain/graph_layout.dart';
 import '../../domain/models.dart';
 import '../../domain/stats.dart';
+import '../focus/timer_controller.dart';
+import '../habits/habits_controller.dart';
 
 /// Creates, edits, archives and deletes skills. XP-changing deletion goes
 /// through the [LogPipeline].
 class SkillsController {
-  SkillsController(this.db, this.clock, this.pipeline, {Random? rng})
-    : _rng = rng ?? Random(),
-      _skills = SkillsRepo(db),
-      _links = LinksRepo(db),
-      _habits = HabitsRepo(db);
+  SkillsController(
+    this.db,
+    this.clock,
+    this.pipeline, {
+    Random? rng,
+    this.afterChange,
+  }) : _rng = rng ?? Random(),
+       _skills = SkillsRepo(db),
+       _links = LinksRepo(db),
+       _habits = HabitsRepo(db);
 
   final MeskDb db;
   final Clock clock;
   final LogPipeline pipeline;
   final Random _rng;
+
+  /// Called after a skill was archived or deleted, which changes habits and
+  /// may end the running session: the app re-plans reminders and reloads the
+  /// timer. Never throws.
+  final Future<void> Function()? afterChange;
   final SkillsRepo _skills;
   final LinksRepo _links;
   final HabitsRepo _habits;
@@ -105,6 +117,7 @@ class SkillsController {
       }
     });
     await pipeline.afterHabitChange();
+    await _changed();
   }
 
   /// Brings the skill back. Its archived habits stay archived.
@@ -114,7 +127,18 @@ class SkillsController {
     await _skills.put(skill.copyWith(archivedAt: null));
   }
 
-  Future<void> delete(String id) => pipeline.deleteSkill(id);
+  Future<void> delete(String id) async {
+    await pipeline.deleteSkill(id);
+    await _changed();
+  }
+
+  Future<void> _changed() async {
+    try {
+      await afterChange?.call();
+    } on Object {
+      // Best effort: the next resume re-plans and reloads anyway.
+    }
+  }
 }
 
 final skillsControllerProvider = Provider<SkillsController>(
@@ -122,5 +146,10 @@ final skillsControllerProvider = Provider<SkillsController>(
     ref.watch(dbProvider),
     ref.watch(clockProvider),
     ref.watch(pipelineProvider),
+    afterChange: () async {
+      // A deleted skill takes its timed habits and a running session with it.
+      await ref.read(habitsControllerProvider).rescheduleReminders();
+      await ref.read(timerControllerProvider.notifier).reconcile();
+    },
   ),
 );

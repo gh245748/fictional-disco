@@ -80,6 +80,23 @@ void main() {
     });
     tearDown(() => db.close());
 
+    test(
+      'delete and archive tell the app so reminders and timer follow',
+      () async {
+        var changes = 0;
+        final watched = SkillsController(
+          db,
+          demoClock(),
+          LogPipeline(db, demoClock()),
+          afterChange: () async => changes++,
+        );
+        await watched.archive('okuma');
+        expect(changes, 1);
+        await watched.delete('yoga');
+        expect(changes, 2);
+      },
+    );
+
     test('create places the skill near positioned linked skills', () async {
       final skills = SkillsRepo(db);
       final okuma = (await skills.get('okuma'))!;
