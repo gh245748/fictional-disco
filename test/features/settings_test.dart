@@ -20,6 +20,7 @@ import 'package:mesk/services/notifications.dart';
 import '../support/app_harness.dart';
 import '../support/demo_data.dart';
 import '../support/golden.dart';
+import '../support/mockup.dart';
 
 /// Records what would have been shared.
 class _FakeShare implements ShareAdapter {
@@ -145,6 +146,16 @@ Future<String> _demoBackup(WidgetTester t, DateTime at) => _db(t, () async {
   final other = await MeskDb.openMemory();
   await seedDemo(other);
   final json = await exportBackup(other, at);
+  await other.close();
+  return json;
+});
+
+/// A backup holding a single skill, made at 2026-11-01.
+Future<String> _oneSkillBackup(WidgetTester t) => _db(t, () async {
+  final other = await MeskDb.openMemory();
+  await KvRepo(other).saveSettings(const AppSettings(onboarded: true));
+  await SkillsRepo(other).put(mockupSkillsAndLevels().$1.first);
+  final json = await exportBackup(other, DateTime.utc(2026, 11, 1));
   await other.close();
   return json;
 });
@@ -554,6 +565,32 @@ void main() {
       );
     });
 
+    testWidgets('no undo action when the safety copy holds no data', (t) async {
+      final db = await openTestDb(t);
+      await _pump(
+        t,
+        db,
+        safetyCopy: _FakeSafetyCopy(content: await _emptyBackup(t)),
+      );
+      expect(
+        find.text('Geri yüklemeden önceki veriye dön', skipOffstage: false),
+        findsNothing,
+      );
+    });
+
+    testWidgets('undo leaves lastBackupAt alone', (t) async {
+      final db = await openTestDb(t);
+      final old = await _demoBackup(t, DateTime.utc(2026, 11, 1, 10));
+      await _pump(t, db, safetyCopy: _FakeSafetyCopy(content: old));
+      final before = (await _settings(t, db)).lastBackupAt;
+      expect(before, isNotNull);
+      await _tap(t, find.text('Geri yüklemeden önceki veriye dön'));
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Önceki veriye dönüldü'), findsOneWidget);
+      expect((await _settings(t, db)).lastBackupAt, before);
+    });
+
     testWidgets('undo restores the safety copy and swaps it with today', (
       t,
     ) async {
@@ -590,8 +627,8 @@ void main() {
       t,
     ) async {
       final db = await openTestDb(t);
-      final emptyCopy = await _emptyBackup(t);
-      final copy = _FakeSafetyCopy(content: emptyCopy);
+      final smallCopy = await _oneSkillBackup(t);
+      final copy = _FakeSafetyCopy(content: smallCopy);
       final demoSkills = await _db(t, () => SkillsRepo(db).all());
       await _pump(t, db, safetyCopy: copy);
       for (final expectSkills in [false, true]) {
@@ -599,7 +636,7 @@ void main() {
         await t.tap(find.text('Geri yükle'));
         await t.pumpAndSettle();
         final now = await _db(t, () => SkillsRepo(db).all());
-        expect(now.isEmpty, !expectSkills);
+        expect(now.length, expectSkills ? demoSkills.length : 1);
         if (expectSkills) expect(now, demoSkills);
       }
     });

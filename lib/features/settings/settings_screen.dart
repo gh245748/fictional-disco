@@ -134,7 +134,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ref.read(timerControllerProvider).status != TimerStatus.idle;
       final ok = await _confirmReplace(summary, sessionActive);
       if (!ok || !mounted) return;
-      final outcome = await actions.restore(text);
+      final outcome = await actions.restore(text, undo: undo);
       ref.invalidate(safetyCopyProvider);
       _snack(
         !outcome.derivedDataUpdated
@@ -154,6 +154,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// An empty safety copy (restore onto a fresh install) is not worth
+  /// offering as an undo target.
+  static bool _hasData(BackupSummary b) =>
+      b.skills > 0 || b.entries > 0 || b.habits > 0;
 
   /// "21 Kasım 2026 tarihli yedek: 12 yetenek, 1.240 kayıt, 5 alışkanlık."
   static String _describe(BackupSummary b) {
@@ -350,8 +355,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         label: 'Yedekten geri yükle',
                         onPressed: _busy ? null : _import,
                       ),
-                      if (ref.watch(safetyCopyProvider).value
-                          case final copy?) ...[
+                      if (ref.watch(safetyCopyProvider).value case final copy?
+                          when _hasData(copy.summary)) ...[
                         MeskSecondaryButton(
                           label: 'Geri yüklemeden önceki veriye dön',
                           onPressed: _busy

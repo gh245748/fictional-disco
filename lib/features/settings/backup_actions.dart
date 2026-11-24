@@ -225,7 +225,11 @@ class BackupActions {
   /// reminders and the timer in line with it. The current data is first
   /// saved as a safety copy. Throws [BackupException] for a rejected file or
   /// when the safety copy cannot be written, leaving the data as it was.
-  Future<RestoreOutcome> restore(String jsonText) async {
+  ///
+  /// A restored user-picked file counts as a backup of its own date. With
+  /// [undo] the text is the safety copy itself, which never left the device,
+  /// so `lastBackupAt` keeps the value the restored data carries.
+  Future<RestoreOutcome> restore(String jsonText, {bool undo = false}) async {
     final summary = inspectBackup(jsonText);
     try {
       await safetyCopy.stageSafetyCopy(await exportBackup(db, clock.nowUtc()));
@@ -242,8 +246,7 @@ class BackupActions {
     } on Object {
       // The previous copy stays; the restore itself went through.
     }
-    // The restored file is itself a backup of that date.
-    final at = summary.exportedAt;
+    final at = undo ? null : summary.exportedAt;
     var updated = true;
     try {
       if (at != null) await _markBackedUp(at);
