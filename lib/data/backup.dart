@@ -62,14 +62,20 @@ final Map<String, _Validator> _kvValidators = {
 };
 
 /// Serialises every store to the JSON backup format.
+///
+/// All stores are read in one transaction, so a write that lands meanwhile
+/// cannot split an entry from its awards.
 Future<String> exportBackup(MeskDb db, DateTime nowUtc) async {
-  final data = <String, Object?>{};
-  for (final e in _stores.entries) {
-    final records = await e.value.find(db.database);
-    data[e.key] = [
-      for (final r in records) {'key': r.key, 'value': r.value},
-    ];
-  }
+  final data = await db.database.transaction((txn) async {
+    final out = <String, Object?>{};
+    for (final e in _stores.entries) {
+      final records = await e.value.find(txn);
+      out[e.key] = [
+        for (final r in records) {'key': r.key, 'value': r.value},
+      ];
+    }
+    return out;
+  });
   return jsonEncode({
     'format': backupFormat,
     'version': backupVersion,
@@ -78,9 +84,49 @@ Future<String> exportBackup(MeskDb db, DateTime nowUtc) async {
   });
 }
 
+/// What a backup file holds, for the confirmation before restoring it.
+class BackupSummary {
+  const BackupSummary({
+    required this.exportedAt,
+    required this.skills,
+    required this.entries,
+    required this.habits,
+  });
+
+  /// When the file was made; null when the file does not say.
+  final DateTime? exportedAt;
+  final int skills;
+  final int entries;
+  final int habits;
+}
+
+/// Validates [jsonText] like [importBackup] does, without writing anything,
+/// and counts what it holds. Throws [BackupException] for a rejected file.
+BackupSummary inspectBackup(String jsonText) {
+  final parsed = _parse(jsonText);
+  return BackupSummary(
+    exportedAt: _exportedAt(jsonText),
+    skills: parsed['skills']?.length ?? 0,
+    entries: parsed['entries']?.length ?? 0,
+    habits: parsed['habits']?.length ?? 0,
+  );
+}
+
+DateTime? _exportedAt(String jsonText) {
+  try {
+    final raw = (jsonDecode(jsonText) as Map<String, Object?>)['exportedAt'];
+    return raw is String ? DateTime.tryParse(raw)?.toUtc() : null;
+  } on Object {
+    return null;
+  }
+}
+
 /// Replaces the whole database with the backup in [jsonText]. Everything is
 /// validated first; the write itself is one transaction, so a rejected file
 /// leaves the database untouched. The caller runs `recomputeAll()` afterwards.
+///
+/// A running session never moves across a restore: the stored timer is
+/// reset to idle, whatever the file says.
 Future<void> importBackup(MeskDb db, String jsonText) async {
   final parsed = _parse(jsonText);
 
@@ -134,7 +180,12 @@ Map<String, List<MapEntry<String, Object?>>> _parse(String jsonText) {
           // Unknown kv key: not ours to restore.
           continue;
         }
-        records.add(MapEntry(key, value));
+        records.add(
+          MapEntry(
+            key,
+            name == 'kv' && key == 'timer' ? TimerState.idle.toJson() : value,
+          ),
+        );
       }
       out[name] = records;
     }

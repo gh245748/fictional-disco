@@ -169,6 +169,16 @@ Future<void> _seed(MeskDb db) async {
 Map<String, Object?> _dataOf(String json) =>
     (jsonDecode(json) as Map<String, Object?>)['data']! as Map<String, Object?>;
 
+/// The backup data without the running session, which a restore resets.
+Map<String, Object?> withoutTimer(String json) {
+  final d = Map<String, Object?>.from(_dataOf(json));
+  d['kv'] = [
+    for (final r in d['kv']! as List)
+      if ((r as Map)['key'] != 'timer') r,
+  ];
+  return d;
+}
+
 String _wrap(Map<String, Object?> data, {int version = backupVersion}) =>
     jsonEncode({
       'format': backupFormat,
@@ -215,7 +225,52 @@ void main() {
     addTearDown(fresh.close);
     await importBackup(fresh, first);
     final second = await exportBackup(fresh, now);
-    expect(_dataOf(second), _dataOf(first));
+    // Everything but the running session comes back as it was.
+    expect(withoutTimer(second), withoutTimer(first));
+  });
+
+  test('import resets a stored running timer to idle', () async {
+    await _seed(db);
+    final backup = await exportBackup(db, now);
+    await importBackup(db, backup);
+    final timer = (_dataOf(await exportBackup(db, now))['kv']! as List)
+        .cast<Map>()
+        .firstWhere((r) => r['key'] == 'timer');
+    expect(timer['value'], TimerState.idle.toJson());
+  });
+
+  test(
+    'inspectBackup counts skills, entries and habits and the date',
+    () async {
+      await _seed(db);
+      final summary = inspectBackup(await exportBackup(db, now));
+      expect(summary.exportedAt, now);
+      expect(summary.skills, 2);
+      expect(summary.entries, 1);
+      expect(summary.habits, greaterThanOrEqualTo(1));
+    },
+  );
+
+  test('inspectBackup rejects like import and writes nothing', () async {
+    await _seed(db);
+    final before = await exportBackup(db, now);
+    expect(() => inspectBackup('{not json'), throwsA(isA<BackupException>()));
+    expect(
+      () => inspectBackup(_wrap({}, version: backupVersion + 1)),
+      throwsA(isA<BackupException>()),
+    );
+    expect(await exportBackup(db, now), before);
+  });
+
+  test('inspectBackup of a file without exportedAt has no date', () {
+    final noDate = jsonEncode({
+      'format': backupFormat,
+      'version': backupVersion,
+      'data': <String, Object?>{},
+    });
+    final summary = inspectBackup(noDate);
+    expect(summary.exportedAt, isNull);
+    expect(summary.skills, 0);
   });
 
   test('import replaces existing data', () async {
@@ -234,7 +289,7 @@ void main() {
         );
     await importBackup(db, backup);
     expect(await MeskDb.skills.record('extra').get(db.database), isNull);
-    expect(_dataOf(await exportBackup(db, now)), _dataOf(backup));
+    expect(withoutTimer(await exportBackup(db, now)), withoutTimer(backup));
   });
 
   test('unknown stores are ignored and missing stores are empty', () async {

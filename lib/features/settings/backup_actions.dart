@@ -18,24 +18,72 @@ import '../habits/habits_controller.dart';
 /// Hands a backup file to the system share sheet.
 abstract class ShareAdapter {
   /// Writes [content] to a temporary file called [fileName] and shares it.
-  /// Throws when the file cannot be written or shared.
-  Future<void> shareJsonFile(String fileName, String content);
+  /// Throws when the file cannot be written or shared. The result says
+  /// whether the user finished or dismissed the share sheet.
+  Future<ShareResult> shareJsonFile(String fileName, String content);
+}
+
+/// Prefix and suffix of the exported temporary files.
+const _exportPrefix = 'mesk-yedek-';
+const _exportSuffix = '.json';
+
+/// Deletes exported backup files left in the temporary directory. Never
+/// called right after sharing: the receiving app may still be reading the
+/// file. Best effort.
+Future<void> deleteStaleExports() async {
+  try {
+    final dir = await getTemporaryDirectory();
+    await for (final f in dir.list()) {
+      final name = p.basename(f.path);
+      if (f is File &&
+          name.startsWith(_exportPrefix) &&
+          name.endsWith(_exportSuffix)) {
+        await f.delete();
+      }
+    }
+  } on Object {
+    // Stale files are harmless; the next export or launch retries.
+  }
 }
 
 class SystemShareAdapter implements ShareAdapter {
   const SystemShareAdapter();
 
   @override
-  Future<void> shareJsonFile(String fileName, String content) async {
+  Future<ShareResult> shareJsonFile(String fileName, String content) async {
+    await deleteStaleExports();
     final dir = await getTemporaryDirectory();
     final file = File(p.join(dir.path, fileName));
     await file.writeAsString(content, flush: true);
-    await SharePlus.instance.share(
+    return SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: 'application/json')],
         fileNameOverrides: [fileName],
       ),
     );
+  }
+}
+
+/// Where the copy of the current data goes before a restore replaces it.
+abstract class SafetyCopyStore {
+  /// Replaces the previous safety copy with [content]. Throws on failure.
+  Future<void> writeSafetyCopy(String content);
+}
+
+/// The one rolling safety copy, in the app documents directory.
+const safetyCopyFileName = 'mesk-geri-yukleme-oncesi.json';
+
+class SystemSafetyCopyStore implements SafetyCopyStore {
+  const SystemSafetyCopyStore();
+
+  @override
+  Future<void> writeSafetyCopy(String content) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final target = File(p.join(dir.path, safetyCopyFileName));
+    // Write beside it first so a failed write keeps the previous copy.
+    final tmp = File('${target.path}.tmp');
+    await tmp.writeAsString(content, flush: true);
+    await tmp.rename(target.path);
   }
 }
 
@@ -72,9 +120,22 @@ final shareAdapterProvider = Provider<ShareAdapter>(
   (ref) => const SystemShareAdapter(),
 );
 
+final safetyCopyStoreProvider = Provider<SafetyCopyStore>(
+  (ref) => const SystemSafetyCopyStore(),
+);
+
 final backupFilePickerProvider = Provider<BackupFilePicker>(
   (ref) => const SystemBackupFilePicker(),
 );
+
+/// What a restore did.
+class RestoreOutcome {
+  const RestoreOutcome({required this.derivedDataUpdated});
+
+  /// False when the data was replaced but recomputing levels, achievements
+  /// or reminders failed afterwards.
+  final bool derivedDataUpdated;
+}
 
 /// Export and restore (§5.14).
 class BackupActions {
@@ -82,6 +143,7 @@ class BackupActions {
     required this.db,
     required this.clock,
     required this.share,
+    required this.safetyCopy,
     required this.pipeline,
     required this.habits,
     required this.reconcileTimer,
@@ -90,35 +152,66 @@ class BackupActions {
   final MeskDb db;
   final Clock clock;
   final ShareAdapter share;
+  final SafetyCopyStore safetyCopy;
   final LogPipeline pipeline;
   final HabitsController habits;
 
   /// Reloads the stored timer after the data was replaced.
   final Future<void> Function() reconcileTimer;
 
-  /// Shares a backup file. `lastBackupAt` is set only once the share call
-  /// returned without throwing.
-  Future<void> export() async {
+  /// Shares a backup file. `lastBackupAt` is set only when the share call
+  /// returned without throwing and the user did not dismiss the share sheet
+  /// (a platform that cannot tell counts as shared). Returns whether the
+  /// backup counted.
+  Future<bool> export() async {
     final now = clock.nowUtc();
     final json = await exportBackup(db, now);
     final day = dayOfInstant(now, clock.offsetMinutesAt(now), 0);
-    await share.shareJsonFile(backupFileName(day), json);
-    final kv = KvRepo(db);
-    await kv.saveSettings((await kv.settings()).copyWith(lastBackupAt: now));
+    final result = await share.shareJsonFile(backupFileName(day), json);
+    if (result.status == ShareResultStatus.dismissed) return false;
+    await _markBackedUp(now);
+    return true;
   }
 
+  Future<void> _markBackedUp(DateTime at) async {
+    final kv = KvRepo(db);
+    await kv.saveSettings((await kv.settings()).copyWith(lastBackupAt: at));
+  }
+
+  /// Validates [jsonText] and counts what it holds, changing nothing.
+  /// Throws [BackupException] for a rejected file.
+  BackupSummary inspect(String jsonText) => inspectBackup(jsonText);
+
   /// Replaces all data with [jsonText], then brings derived rows, habit
-  /// reminders and the timer in line with it. Throws [BackupException] for a
-  /// rejected file, leaving the data as it was.
-  Future<void> restore(String jsonText) async {
+  /// reminders and the timer in line with it. The current data is first
+  /// saved as a safety copy. Throws [BackupException] for a rejected file or
+  /// when the safety copy cannot be written, leaving the data as it was.
+  Future<RestoreOutcome> restore(String jsonText) async {
+    final summary = inspectBackup(jsonText);
+    try {
+      await safetyCopy.writeSafetyCopy(await exportBackup(db, clock.nowUtc()));
+    } on Object {
+      throw const BackupException(
+        'Mevcut verilerinin kopyası alınamadığı için geri yükleme yapılmadı.',
+      );
+    }
     await importBackup(db, jsonText);
-    await pipeline.recomputeAll();
-    await habits.rescheduleReminders();
+    // The restored file is itself a backup of that date.
+    final at = summary.exportedAt;
+    var updated = true;
+    try {
+      if (at != null) await _markBackedUp(at);
+      await pipeline.recomputeAll();
+      await habits.rescheduleReminders();
+    } on Object {
+      updated = false;
+    }
     try {
       await reconcileTimer();
     } on Object {
       // The timer stays as loaded; the next resume retries.
     }
+    return RestoreOutcome(derivedDataUpdated: updated);
   }
 }
 
@@ -127,6 +220,7 @@ final backupActionsProvider = Provider<BackupActions>(
     db: ref.watch(dbProvider),
     clock: ref.watch(clockProvider),
     share: ref.watch(shareAdapterProvider),
+    safetyCopy: ref.watch(safetyCopyStoreProvider),
     pipeline: ref.watch(pipelineProvider),
     habits: ref.watch(habitsControllerProvider),
     reconcileTimer: () =>

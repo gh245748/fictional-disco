@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:mesk/app/providers.dart';
 import 'package:mesk/data/backup.dart';
 import 'package:mesk/data/db.dart';
@@ -10,6 +11,8 @@ import 'package:mesk/data/log_pipeline.dart';
 import 'package:mesk/data/skills_repo.dart';
 import 'package:mesk/domain/format.dart';
 import 'package:mesk/domain/models.dart';
+import 'package:mesk/domain/timer_machine.dart';
+import 'package:mesk/features/focus/timer_controller.dart';
 import 'package:mesk/features/settings/backup_actions.dart';
 import 'package:mesk/features/settings/settings_screen.dart';
 import 'package:mesk/services/notifications.dart';
@@ -20,15 +23,31 @@ import '../support/golden.dart';
 
 /// Records what would have been shared.
 class _FakeShare implements ShareAdapter {
-  _FakeShare({this.fail = false});
+  _FakeShare({this.fail = false, this.status = ShareResultStatus.success});
 
   final bool fail;
+  final ShareResultStatus status;
   final List<(String name, String content)> shared = [];
 
   @override
-  Future<void> shareJsonFile(String fileName, String content) async {
+  Future<ShareResult> shareJsonFile(String fileName, String content) async {
     if (fail) throw StateError('share failed');
     shared.add((fileName, content));
+    return ShareResult('', status);
+  }
+}
+
+/// Keeps the safety copy in memory; [fail] makes writing it throw.
+class _FakeSafetyCopy implements SafetyCopyStore {
+  _FakeSafetyCopy({this.fail = false});
+
+  final bool fail;
+  final List<String> written = [];
+
+  @override
+  Future<void> writeSafetyCopy(String content) async {
+    if (fail) throw StateError('disk full');
+    written.add(content);
   }
 }
 
@@ -62,6 +81,7 @@ Future<void> _pump(
   WidgetTester t,
   MeskDb db, {
   _FakeShare? share,
+  _FakeSafetyCopy? safetyCopy,
   String? picked,
   FakeNotificationService? notifications,
   LogPipeline? pipeline,
@@ -75,6 +95,9 @@ Future<void> _pump(
     pipeline: pipeline,
     overrides: [
       shareAdapterProvider.overrideWithValue(share ?? _FakeShare()),
+      safetyCopyStoreProvider.overrideWithValue(
+        safetyCopy ?? _FakeSafetyCopy(),
+      ),
       backupFilePickerProvider.overrideWithValue(_FakePicker(picked)),
     ],
   );
@@ -103,6 +126,37 @@ Future<String> _emptyBackup(WidgetTester t) => _db(t, () async {
   await other.close();
   return json;
 });
+
+/// A backup of the demo data, made at [at].
+Future<String> _demoBackup(WidgetTester t, DateTime at) => _db(t, () async {
+  final other = await MeskDb.openMemory();
+  await seedDemo(other);
+  final json = await exportBackup(other, at);
+  await other.close();
+  return json;
+});
+
+class _FailingRecompute extends LogPipeline {
+  _FailingRecompute(super.db, super.clock);
+
+  @override
+  Future<void> recomputeAll() => throw StateError('recompute failed');
+}
+
+/// The demo data with a free-mode session running on Okuma.
+Future<MeskDb> _dbWithTimer(WidgetTester t) => openTestDb(
+  t,
+  seed: (db) async {
+    await seedDemo(db);
+    await KvRepo(db).saveTimer(
+      TimerMachine.start(
+        mode: TimerMode.free,
+        skillId: 'okuma',
+        now: demoClock().nowUtc().subtract(const Duration(minutes: 20)),
+      ),
+    );
+  },
+);
 
 void main() {
   group('sections', () {
@@ -287,15 +341,8 @@ void main() {
       final skillsBefore = await _db(t, () => SkillsRepo(db).all());
       await _pump(t, db, picked: 'bu bir yedek değil');
       await _tap(t, find.text('Yedekten geri yükle'));
-      expect(
-        find.text(
-          'Bütün mevcut veriler bu yedekteki verilerle değiştirilecek.',
-        ),
-        findsOneWidget,
-      );
-      await t.tap(find.text('Geri yükle'));
-      await t.pumpAndSettle();
-
+      // The file is rejected before the confirmation is shown.
+      expect(find.text('Geri yükle'), findsNothing);
       expect(find.text('Yedek dosyası okunamadı.'), findsOneWidget);
       await t.tap(find.text('Tamam'));
       await t.pumpAndSettle();
@@ -335,7 +382,152 @@ void main() {
       expect(await _db(t, () => SkillsRepo(db).all()), isEmpty);
       expect(await _db(t, () => EntriesRepo(db).all()), isEmpty);
       expect(n.calls, contains('scheduleHabitReminders'));
-      expect(find.text('Yedek geri yüklendi.'), findsOneWidget);
+      expect(find.textContaining('Yedek geri yüklendi.'), findsOneWidget);
+    });
+
+    testWidgets('a dismissed share sheet does not count as a backup', (
+      t,
+    ) async {
+      final db = await openTestDb(t);
+      final before = (await _settings(t, db)).lastBackupAt;
+      final share = _FakeShare(status: ShareResultStatus.dismissed);
+      await _pump(t, db, share: share);
+      await _tap(t, find.text('Yedek al'));
+      expect(share.shared, hasLength(1));
+      expect((await _settings(t, db)).lastBackupAt, before);
+      expect(find.text('Son yedek: 3 gün önce'), findsOneWidget);
+    });
+
+    testWidgets('an unknown share result still counts (Android)', (t) async {
+      final db = await openTestDb(t);
+      await _pump(
+        t,
+        db,
+        share: _FakeShare(status: ShareResultStatus.unavailable),
+      );
+      await _tap(t, find.text('Yedek al'));
+      expect((await _settings(t, db)).lastBackupAt, demoClock().nowUtc());
+    });
+
+    testWidgets('the confirmation shows the backup date and counts', (t) async {
+      final db = await openTestDb(t);
+      final json = await _demoBackup(t, DateTime.utc(2026, 11, 1, 10));
+      final s = inspectBackup(json);
+      await _pump(t, db, picked: json);
+      await _tap(t, find.text('Yedekten geri yükle'));
+      expect(
+        find.text(
+          '1 Kasım 2026 tarihli yedek: ${formatCount(s.skills)} yetenek, '
+          '${formatCount(s.entries)} kayıt, ${formatCount(s.habits)} alışkanlık.',
+        ),
+        findsOneWidget,
+      );
+      expect(s.skills, greaterThan(0));
+      expect(find.textContaining('çalışan zamanlayıcı'), findsNothing);
+      expect(find.textContaining('kopyası uygulama klasörüne'), findsOneWidget);
+    });
+
+    testWidgets('the confirmation warns about a running session', (t) async {
+      final db = await _dbWithTimer(t);
+      await _pump(t, db, picked: await _emptyBackup(t));
+      await _tap(t, find.text('Yedekten geri yükle'));
+      expect(
+        find.text('Şu an çalışan zamanlayıcı oturumu da sona erecek.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('restore saves a safety copy of the current data first', (
+      t,
+    ) async {
+      final db = await openTestDb(t);
+      final copy = _FakeSafetyCopy();
+      final skillsBefore = await _db(t, () => SkillsRepo(db).all());
+      await _pump(t, db, picked: await _emptyBackup(t), safetyCopy: copy);
+      await _tap(t, find.text('Yedekten geri yükle'));
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+
+      expect(await _db(t, () => SkillsRepo(db).all()), isEmpty);
+      expect(copy.written, hasLength(1));
+      final saved = inspectBackup(copy.written.single);
+      expect(saved.skills, skillsBefore.length);
+      expect(
+        find.text(
+          'Yedek geri yüklendi. Önceki verilerinin kopyası uygulama '
+          'klasörüne kaydedildi.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no restore when the safety copy cannot be written', (t) async {
+      final db = await openTestDb(t);
+      final skillsBefore = await _db(t, () => SkillsRepo(db).all());
+      await _pump(
+        t,
+        db,
+        picked: await _emptyBackup(t),
+        safetyCopy: _FakeSafetyCopy(fail: true),
+      );
+      await _tap(t, find.text('Yedekten geri yükle'));
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+      expect(await _db(t, () => SkillsRepo(db).all()), skillsBefore);
+      expect(find.textContaining('geri yükleme yapılmadı'), findsOneWidget);
+    });
+
+    testWidgets('a restored backup counts as a backup of its own date', (
+      t,
+    ) async {
+      final db = await openTestDb(t);
+      final json = await _emptyBackup(t); // exportedAt 2026-11-01
+      await _pump(t, db, picked: json);
+      await _tap(t, find.text('Yedekten geri yükle'));
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+      expect((await _settings(t, db)).lastBackupAt, DateTime.utc(2026, 11, 1));
+      expect(find.text('Son yedek: 20 gün önce'), findsOneWidget);
+    });
+
+    testWidgets('restore ends a running session', (t) async {
+      final db = await _dbWithTimer(t);
+      await _pump(t, db, picked: await _emptyBackup(t));
+      await _tap(t, find.text('Yedekten geri yükle'));
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+      expect(
+        t.container().read(timerControllerProvider).status,
+        TimerStatus.idle,
+      );
+    });
+
+    testWidgets('a failure after the data was replaced says so', (t) async {
+      final db = await openTestDb(t);
+      await _pump(
+        t,
+        db,
+        picked: await _emptyBackup(t),
+        pipeline: _FailingRecompute(db, demoClock()),
+      );
+      await _tap(t, find.text('Yedekten geri yükle'));
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+      expect(await _db(t, () => SkillsRepo(db).all()), isEmpty);
+      expect(find.textContaining('Yedek yüklendi ama'), findsOneWidget);
+      expect(find.text('Yedek geri yüklenemedi, tekrar dene.'), findsNothing);
+    });
+
+    testWidgets('about says where the data lives', (t) async {
+      final db = await openTestDb(t);
+      await _pump(t, db);
+      expect(
+        find.textContaining(
+          'iCloud ya da Google cihaz yedeği',
+          skipOffstage: false,
+        ),
+        findsOneWidget,
+      );
     });
   });
 

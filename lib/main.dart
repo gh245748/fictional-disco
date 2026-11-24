@@ -14,6 +14,7 @@ import 'data/db.dart';
 import 'data/log_pipeline.dart';
 import 'data/presets_repo.dart';
 import 'domain/day.dart';
+import 'features/settings/backup_actions.dart' show deleteStaleExports;
 import 'services/local_notifications.dart';
 
 /// Lists the bundled fonts' SIL Open Font License on the licenses page.
@@ -32,6 +33,8 @@ Future<void> main() async {
   final documents = await getApplicationDocumentsDirectory();
   final db = await MeskDb.openFile(p.join(documents.path, 'mesk.db'));
   await PresetsRepo(db).seedBuiltIns();
+  // Exported backups copied for sharing are not needed after the share.
+  await deleteStaleExports();
   final clock = SystemClock();
   // Tapping a notification opens Odak. The container exists only after the
   // service is built, hence the nullable reference (a tap before it exists is ignored).

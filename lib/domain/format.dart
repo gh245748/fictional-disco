@@ -54,6 +54,9 @@ String formatHours(int seconds) {
   return '${_group(hours.round())} sa';
 }
 
+/// 1240 -> "1.240".
+String formatCount(int n) => _group(n);
+
 String _group(int n) {
   final s = n.toString();
   final buf = StringBuffer();

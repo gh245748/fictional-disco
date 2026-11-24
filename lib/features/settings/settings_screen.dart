@@ -7,10 +7,12 @@ import '../../data/backup.dart';
 import '../../data/kv_repo.dart';
 import '../../domain/format.dart';
 import '../../domain/models.dart';
+import '../../domain/timer_machine.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets/buttons.dart';
 import '../../ui/widgets/mesk_card.dart';
 import '../celebrations/celebration_host.dart';
+import '../focus/timer_controller.dart';
 import '../habits/habits_controller.dart';
 import 'backup_actions.dart';
 import 'testflight_reminder.dart';
@@ -101,10 +103,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final actions = ref.read(backupActionsProvider);
       final text = await ref.read(backupFilePickerProvider).pickBackupJson();
       if (text == null || !mounted) return;
-      final ok = await _confirmReplace();
+      final summary = actions.inspect(text);
+      final sessionActive =
+          ref.read(timerControllerProvider).status != TimerStatus.idle;
+      final ok = await _confirmReplace(summary, sessionActive);
       if (!ok || !mounted) return;
-      await actions.restore(text);
-      _snack('Yedek geri yüklendi.');
+      final outcome = await actions.restore(text);
+      _snack(
+        outcome.derivedDataUpdated
+            ? 'Yedek geri yüklendi. Önceki verilerinin kopyası uygulama '
+                  'klasörüne kaydedildi.'
+            : 'Yedek yüklendi ama bazı hesaplar güncellenemedi. Sorun '
+                  'sürerse yedeği bir kez daha geri yükle.',
+      );
     } on BackupException catch (e) {
       await _showError(e.message);
     } on Object {
@@ -114,15 +125,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<bool> _confirmReplace() async {
+  /// "21 Kasım 2026 tarihli yedek: 12 yetenek, 1.240 kayıt, 5 alışkanlık."
+  static String _describe(BackupSummary b) {
+    final at = b.exportedAt;
+    final counts =
+        '${formatCount(b.skills)} yetenek, ${formatCount(b.entries)} kayıt, '
+        '${formatCount(b.habits)} alışkanlık';
+    return at == null
+        ? 'Tarihi bilinmeyen yedek: $counts.'
+        : '${formatDate(at.toLocal())} tarihli yedek: $counts.';
+  }
+
+  Future<bool> _confirmReplace(
+    BackupSummary summary,
+    bool sessionActive,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: MeskColors.surface,
         title: const Text('Yedekten geri yükle', style: MeskType.sectionTitle),
-        content: Text(
-          'Bütün mevcut veriler bu yedekteki verilerle değiştirilecek.',
-          style: MeskType.body14.copyWith(fontWeight: FontWeight.w400),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 12,
+          children: [
+            Text(
+              _describe(summary),
+              style: MeskType.body14.copyWith(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              'Bütün mevcut veriler bu yedekteki verilerle değiştirilecek.',
+              style: MeskType.body14.copyWith(fontWeight: FontWeight.w400),
+            ),
+            if (sessionActive)
+              Text(
+                'Şu an çalışan zamanlayıcı oturumu da sona erecek.',
+                style: MeskType.body14.copyWith(fontWeight: FontWeight.w400),
+              ),
+            const Text(
+              'Geri yüklemeden önce şu anki verilerinin bir kopyası uygulama '
+              'klasörüne kaydedilir.',
+              style: MeskType.caption,
+            ),
+          ],
         ),
         actions: [
           MeskTextButton(
@@ -288,6 +334,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const Text(
                         'Sürüm $appVersion ($appBuild)',
                         style: MeskType.body14,
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'Verilerin bu cihazda durur; telefonunun kendi iCloud ya '
+                          'da Google cihaz yedeği açıksa o yedeğe de dahil '
+                          'olabilir.',
+                          style: MeskType.caption,
+                        ),
                       ),
                       Align(
                         alignment: Alignment.centerLeft,
