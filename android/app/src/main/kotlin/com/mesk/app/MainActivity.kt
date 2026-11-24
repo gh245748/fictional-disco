@@ -1,4 +1,4 @@
-package com.mesk.mesk
+package com.mesk.app
 
 import io.flutter.embedding.android.FlutterActivity
 
