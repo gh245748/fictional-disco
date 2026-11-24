@@ -78,10 +78,18 @@ class _PlanRecorder extends FakeNotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async {
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async {
     plans.add((habits: habits, today: today, data: data));
-    await super.scheduleHabitReminders(habits, today, data);
+    await super.scheduleHabitReminders(
+      habits,
+      today,
+      data,
+      sound: sound,
+      vibration: vibration,
+    );
   }
 }
 

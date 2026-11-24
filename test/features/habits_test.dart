@@ -26,16 +26,28 @@ import '../support/golden.dart';
 class _Recorder extends FakeNotificationService {
   List<Habit> habits = const [];
   LocalDay? today;
+  bool? sound;
+  bool? vibration;
 
   @override
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async {
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async {
     this.habits = habits;
     this.today = today;
-    await super.scheduleHabitReminders(habits, today, data);
+    this.sound = sound;
+    this.vibration = vibration;
+    await super.scheduleHabitReminders(
+      habits,
+      today,
+      data,
+      sound: sound,
+      vibration: vibration,
+    );
   }
 }
 
@@ -124,6 +136,16 @@ void main() {
       expect(rec.calls, contains('scheduleHabitReminders'));
       expect(rec.habits.map((x) => x.id), contains('h-new'));
       expect(rec.today, const LocalDay(2026, 11, 21));
+    });
+
+    test('reminders carry the sound and vibration settings', () async {
+      final kv = KvRepo(db);
+      await kv.saveSettings(
+        (await kv.settings()).copyWith(sound: false, vibration: false),
+      );
+      await controller.rescheduleReminders();
+      expect(rec.sound, isFalse);
+      expect(rec.vibration, isFalse);
     });
 
     test('toggle flips a simple habit check and reschedules', () async {
@@ -654,6 +676,8 @@ class _Throwing extends FakeNotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async => throw StateError('no permission');
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async => throw StateError('no permission');
 }

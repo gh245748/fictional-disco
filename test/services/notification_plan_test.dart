@@ -67,6 +67,7 @@ class RecordingPlugin implements NotificationsPlugin {
   final List<PlannedNotification> scheduled = [];
   final List<bool> exactFlags = [];
   final List<NotificationChannel> channels = [];
+  final List<(bool sound, bool vibration)> alerts = [];
   final List<int> cancelled = [];
   int ongoing = 0;
 
@@ -87,6 +88,7 @@ class RecordingPlugin implements NotificationsPlugin {
     scheduled.add(n);
     exactFlags.add(exact);
     channels.add(channel);
+    alerts.add((sound, vibration));
   }
 
   @override
@@ -232,6 +234,28 @@ void main() {
       today,
       data(),
     );
+  });
+
+  test('habit reminders follow the sound and vibration settings', () async {
+    final plugin = RecordingPlugin();
+    final service = LocalNotificationService(
+      plugin,
+      now: () => DateTime.utc(2026, 11, 1),
+    );
+    final habits = [habit('Su', const DailySchedule())];
+    await service.scheduleHabitReminders(
+      habits,
+      today,
+      data(),
+      sound: false,
+      vibration: true,
+    );
+    expect(plugin.channels.toSet(), {NotificationChannel.habits});
+    expect(plugin.alerts.toSet(), {(false, true)});
+
+    plugin.alerts.clear();
+    await service.scheduleHabitReminders(habits, today, data());
+    expect(plugin.alerts.toSet(), {(true, true)});
   });
 
   test('uses inexact scheduling when exact alarms are not permitted', () async {

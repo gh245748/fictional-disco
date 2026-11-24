@@ -140,9 +140,14 @@ class TimerController extends Notifier<TimerState> {
 
   /// Reloads the stored timer and closes the phases that ended meanwhile.
   /// Call it on app start and resume; then ask about [unattendedPhases].
-  Future<void> reconcile() => _serial(() async {
+  ///
+  /// With [attended] the user was watching the Odak screen when the phases
+  /// ended: they are not "unattended", and later phases are measured from
+  /// now.
+  Future<void> reconcile({bool attended = false}) => _serial(() async {
     final s = await _kv.timer();
-    final next = TimerMachine.advance(s, _now);
+    var next = TimerMachine.advance(s, _now);
+    if (attended && next != s) next = TimerMachine.seen(next, _now);
     if (next != s) await _kv.saveTimer(next);
     _publish(next);
     await _syncNotifications(next);

@@ -25,8 +25,10 @@ abstract class NotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  );
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  });
 }
 
 /// Records every call by name; [requestPermission] answers
@@ -71,8 +73,10 @@ class FakeNotificationService implements NotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async {
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async {
     calls.add('scheduleHabitReminders');
   }
 }

@@ -80,7 +80,13 @@ class HabitsController {
         for (final h in await _habits.all())
           if (h.archivedAt == null) h,
       ];
-      await notifications.scheduleHabitReminders(active, today, data);
+      await notifications.scheduleHabitReminders(
+        active,
+        today,
+        data,
+        sound: settings.sound,
+        vibration: settings.vibration,
+      );
     } on Object {
       // Reminders are best effort; the next change, start or resume retries.
     }

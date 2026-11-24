@@ -234,8 +234,10 @@ class LocalNotificationService implements NotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async {
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async {
     await _cancelRange(habitReminderIdBase, 1 << 30);
     final exact = await _safe(_plugin.canScheduleExact, false);
     final now = _now().toUtc();
@@ -250,8 +252,8 @@ class LocalNotificationService implements NotificationService {
           n,
           channel: NotificationChannel.habits,
           exact: exact,
-          sound: true,
-          vibration: true,
+          sound: sound,
+          vibration: vibration,
         ),
         null,
       );
@@ -297,8 +299,10 @@ class NoopNotificationService implements NotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async {}
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async {}
 }
 
 /// Adapter over `flutter_local_notifications`.
@@ -380,7 +384,7 @@ class FlutterNotificationsPlugin implements NotificationsPlugin {
       await _android?.canScheduleExactNotifications() ?? true;
 
   // Android 8+ fixes sound and vibration per channel, so each on/off
-  // combination of the timer channel is its own channel.
+  // combination of the timer and habit channels is its own channel.
   AndroidNotificationDetails _androidDetails(
     NotificationChannel channel, {
     required bool sound,
@@ -424,12 +428,21 @@ class FlutterNotificationsPlugin implements NotificationsPlugin {
           usesChronometer: true,
         );
       case NotificationChannel.habits:
-        return const AndroidNotificationDetails(
-          'habits',
-          'Alışkanlıklar',
+        final suffix = '${sound ? 's' : 'm'}${vibration ? 'v' : 'n'}';
+        final name = switch ((sound, vibration)) {
+          (true, true) => 'Alışkanlıklar',
+          (true, false) => 'Alışkanlıklar (yalnızca ses)',
+          (false, true) => 'Alışkanlıklar (yalnızca titreşim)',
+          (false, false) => 'Alışkanlıklar (sessiz)',
+        };
+        return AndroidNotificationDetails(
+          'habits_$suffix',
+          name,
           channelDescription: 'Alışkanlık hatırlatmaları',
           importance: Importance.defaultImportance,
           priority: Priority.defaultPriority,
+          playSound: sound,
+          enableVibration: vibration,
         );
     }
   }

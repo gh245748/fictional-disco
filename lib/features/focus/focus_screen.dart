@@ -59,6 +59,9 @@ class FocusScreen extends ConsumerStatefulWidget {
   ConsumerState<FocusScreen> createState() => _FocusScreenState();
 }
 
+/// Longest pause between two ticks that still counts as watching the timer.
+const _watchedGap = Duration(seconds: 3);
+
 class _FocusScreenState extends ConsumerState<FocusScreen> {
   Timer? _ticker;
   int _shownSecond = 0;
@@ -67,6 +70,10 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
   /// A check-in asked for while the tab was hidden; runs once it shows.
   bool _checkInPending = false;
   bool _reconciling = false;
+
+  /// When the ticker last ran, to tell watched phase changes from the app
+  /// coming back after a long time away.
+  DateTime? _lastTick;
 
   /// The user's picks before starting; null means the remembered default.
   String? _skillId;
@@ -130,12 +137,25 @@ class _FocusScreenState extends ConsumerState<FocusScreen> {
     final now = ref.read(clockProvider).nowUtc();
     final s = ref.read(timerControllerProvider);
     if (s.status != TimerStatus.running) return;
+    final previous = _lastTick;
+    _lastTick = now;
+    // Only a tab the user is looking at, ticking without a gap, counts as
+    // watching; a phase that ended while away stays "unattended".
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final watching =
+        TickerMode.valuesOf(context).enabled &&
+        (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
+        previous != null &&
+        !now.isBefore(previous) &&
+        now.difference(previous) <= _watchedGap;
     // A phase ended: store it and reschedule notifications.
     if (!_reconciling && TimerMachine.advance(s, now) != s) {
       _reconciling = true;
-      _ctl.reconcile().catchError((Object _) {}).whenComplete(() {
-        _reconciling = false;
-      });
+      _ctl.reconcile(attended: watching).catchError((Object _) {}).whenComplete(
+        () {
+          _reconciling = false;
+        },
+      );
     }
     final second = now.millisecondsSinceEpoch ~/ 1000;
     if (second != _shownSecond) setState(() => _shownSecond = second);

@@ -222,6 +222,20 @@ void main() {
       expect(s.vibration, isFalse);
     });
 
+    testWidgets('sound and vibration changes re-plan habit reminders', (
+      t,
+    ) async {
+      final db = await openTestDb(t);
+      final n = FakeNotificationService();
+      await _pump(t, db, notifications: n);
+      int plans() => n.calls.where((c) => c == 'scheduleHabitReminders').length;
+      final before = plans();
+      await _tap(t, find.byKey(const ValueKey('switch-sound')));
+      expect(plans(), before + 1);
+      await _tap(t, find.byKey(const ValueKey('switch-vibration')));
+      expect(plans(), before + 2);
+    });
+
     testWidgets('notification permission is asked again and shown', (t) async {
       final db = await openTestDb(t);
       final n = _Perm(permissionGranted: false);

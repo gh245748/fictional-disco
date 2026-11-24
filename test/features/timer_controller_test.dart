@@ -71,8 +71,10 @@ class _BrokenNotifications implements NotificationService {
   Future<void> scheduleHabitReminders(
     List<Habit> habits,
     LocalDay today,
-    HabitDayData data,
-  ) async => _fail();
+    HabitDayData data, {
+    bool sound = true,
+    bool vibration = true,
+  }) async => _fail();
 }
 
 /// Fails the first [failures] plain writes of an idle timer (a session
@@ -198,6 +200,23 @@ void main() {
     expect(stored.status, TimerStatus.running);
     expect(stored, env.state);
     expect(env.ctl.preview().workSeconds, 600);
+  });
+
+  test('phases that ended while the screen was watched are attended', () async {
+    final env = await _setup(FakeNotificationService());
+    await PresetsRepo(env.db).put(_autoAll);
+    await env.ctl.start(
+      mode: TimerMode.pomodoro,
+      skillId: 'okuma',
+      presetId: 'oto',
+    );
+    // The Odak screen reconciles within a second of every boundary.
+    for (final minutes in [26, 31, 56]) {
+      env.clock.utc = env.t0.add(Duration(minutes: minutes));
+      await env.ctl.reconcile(attended: true);
+    }
+    expect((await KvRepo(env.db).timer()).completedWork, hasLength(2));
+    expect(env.ctl.unattendedPhases(), isEmpty);
   });
 
   test('reconcile after 90 min with auto work lists unattended', () async {

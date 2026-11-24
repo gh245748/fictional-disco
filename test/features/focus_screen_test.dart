@@ -251,6 +251,36 @@ void main() {
     expect(find.text('Başlat'), findsOneWidget);
   });
 
+  testWidgets('phases that start and end on the open screen are attended', (
+    t,
+  ) async {
+    const quick = TimerPreset('kisa', 'Kısa', 1, 1, 15, 4, true, true, false);
+    final clock = demoClock();
+    final db = await _dbWithTimer(
+      t,
+      (now) => TimerMachine.start(
+        mode: TimerMode.pomodoro,
+        skillId: 'okuma',
+        preset: quick,
+        now: now,
+      ),
+    );
+    await pumpMeskApp(t, db, '/odak', clock: clock);
+    // Four minutes watched second by second: two work phases end.
+    for (var i = 0; i < 4 * 60; i++) {
+      clock.advance(const Duration(seconds: 1));
+      await t.pump(const Duration(seconds: 1));
+    }
+    await t.pumpAndSettle();
+
+    final stored = await _storedTimer(t, db);
+    expect(stored.completedWork.length, greaterThanOrEqualTo(2));
+    expect([
+      for (final r in stored.completedWork) r.unattended,
+    ], everyElement(false));
+    expect(find.textContaining('Sen yokken'), findsNothing);
+  });
+
   testWidgets('unattended sheet asks which phases count', (t) async {
     final db = await _dbWithTimer(
       t,

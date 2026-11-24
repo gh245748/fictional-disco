@@ -302,6 +302,13 @@ abstract final class TimerMachine {
     }
   }
 
+  /// Records that the user watched the timer at [now] (the Odak screen was
+  /// open), so work phases starting before it count as attended.
+  static TimerState seen(TimerState s, DateTime now) =>
+      s.status == TimerStatus.idle
+      ? s
+      : s._copy(lastInteractionAt: now.toUtc());
+
   static TimerState pause(TimerState s, DateTime now) {
     now = now.toUtc();
     final a = advance(s, now);

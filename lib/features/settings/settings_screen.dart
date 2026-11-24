@@ -70,6 +70,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }, 'Kaydedilemedi, tekrar dene.');
   }
 
+  /// Sound and vibration also apply to the habit reminders already planned.
+  Future<void> _updateAlerts(AppSettings Function(AppSettings s) change) async {
+    await _update(change);
+    await ref.read(habitsControllerProvider).rescheduleReminders();
+  }
+
   Future<void> _setDayStart(int hour) => _guard(() async {
     final kv = KvRepo(ref.read(dbProvider));
     await kv.saveSettings((await kv.settings()).copyWith(dayStartHour: hour));
@@ -275,7 +281,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         keyName: 'sound',
                         label: 'Ses',
                         value: settings.sound,
-                        onChanged: (v) => _update((s) => s.copyWith(sound: v)),
+                        onChanged: (v) =>
+                            _updateAlerts((s) => s.copyWith(sound: v)),
                       ),
                       const Divider(),
                       _SwitchRow(
@@ -283,7 +290,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         label: 'Titreşim',
                         value: settings.vibration,
                         onChanged: (v) =>
-                            _update((s) => s.copyWith(vibration: v)),
+                            _updateAlerts((s) => s.copyWith(vibration: v)),
                       ),
                       const Divider(),
                       _PermissionRow(
