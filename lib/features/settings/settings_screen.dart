@@ -103,24 +103,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _import() async {
-    if (_busy) return;
+    final text = await _pick();
+    if (text != null) await _restore(text, undo: false);
+  }
+
+  Future<String?> _pick() async {
+    if (_busy) return null;
+    setState(() => _busy = true);
+    try {
+      return await ref.read(backupFilePickerProvider).pickBackupJson();
+    } on BackupException catch (e) {
+      await _showError(e.message);
+    } on Object {
+      _snack('Yedek geri yüklenemedi, tekrar dene.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    return null;
+  }
+
+  /// Confirms with the backup's date and counts, then restores [text]. For
+  /// [undo] the text is the safety copy itself.
+  Future<void> _restore(String text, {required bool undo}) async {
+    if (_busy || !mounted) return;
     setState(() => _busy = true);
     try {
       final actions = ref.read(backupActionsProvider);
-      final text = await ref.read(backupFilePickerProvider).pickBackupJson();
-      if (text == null || !mounted) return;
       final summary = actions.inspect(text);
       final sessionActive =
           ref.read(timerControllerProvider).status != TimerStatus.idle;
       final ok = await _confirmReplace(summary, sessionActive);
       if (!ok || !mounted) return;
       final outcome = await actions.restore(text);
+      ref.invalidate(safetyCopyProvider);
       _snack(
-        outcome.derivedDataUpdated
-            ? 'Yedek geri yüklendi. Önceki verilerinin kopyası uygulama '
-                  'klasörüne kaydedildi.'
-            : 'Yedek yüklendi ama bazı hesaplar güncellenemedi. Sorun '
-                  'sürerse yedeği bir kez daha geri yükle.',
+        !outcome.derivedDataUpdated
+            ? 'Yedek yüklendi ama bazı hesaplar güncellenemedi. Sorun '
+                  'sürerse yedeği bir kez daha geri yükle.'
+            : undo
+            ? 'Önceki veriye dönüldü. Az önceki verilerinin kopyası '
+                  'saklandı; istersen oraya geri dönebilirsin.'
+            : 'Yedek geri yüklendi. Önceki verilerinin kopyası uygulama '
+                  'klasörüne kaydedildi.',
       );
     } on BackupException catch (e) {
       await _showError(e.message);
@@ -326,6 +350,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         label: 'Yedekten geri yükle',
                         onPressed: _busy ? null : _import,
                       ),
+                      if (ref.watch(safetyCopyProvider).value
+                          case final copy?) ...[
+                        MeskSecondaryButton(
+                          label: 'Geri yüklemeden önceki veriye dön',
+                          onPressed: _busy
+                              ? null
+                              : () => _restore(copy.text, undo: true),
+                        ),
+                        Text(
+                          copy.summary.exportedAt == null
+                              ? 'Tarihi bilinmeyen kopya'
+                              : '${formatDate(copy.summary.exportedAt!.toLocal())} '
+                                    'tarihli kopya',
+                          style: MeskType.caption,
+                        ),
+                      ],
                     ],
                   ),
                 ),

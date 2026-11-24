@@ -37,17 +37,30 @@ class _FakeShare implements ShareAdapter {
   }
 }
 
-/// Keeps the safety copy in memory; [fail] makes writing it throw.
+/// Keeps the safety copy in memory; [fail] makes staging it throw.
 class _FakeSafetyCopy implements SafetyCopyStore {
-  _FakeSafetyCopy({this.fail = false});
+  _FakeSafetyCopy({this.fail = false, this.content});
 
   final bool fail;
+
+  /// The committed safety copy.
+  String? content;
+  String? _staged;
   final List<String> written = [];
 
   @override
-  Future<void> writeSafetyCopy(String content) async {
+  Future<String?> readSafetyCopy() async => content;
+
+  @override
+  Future<void> stageSafetyCopy(String text) async {
     if (fail) throw StateError('disk full');
-    written.add(content);
+    _staged = text;
+  }
+
+  @override
+  Future<void> commitStagedSafetyCopy() async {
+    content = _staged;
+    written.add(_staged!);
   }
 }
 
@@ -530,6 +543,65 @@ void main() {
       expect(await _db(t, () => SkillsRepo(db).all()), isEmpty);
       expect(find.textContaining('Yedek yüklendi ama'), findsOneWidget);
       expect(find.text('Yedek geri yüklenemedi, tekrar dene.'), findsNothing);
+    });
+
+    testWidgets('no undo action without a safety copy', (t) async {
+      final db = await openTestDb(t);
+      await _pump(t, db);
+      expect(
+        find.text('Geri yüklemeden önceki veriye dön', skipOffstage: false),
+        findsNothing,
+      );
+    });
+
+    testWidgets('undo restores the safety copy and swaps it with today', (
+      t,
+    ) async {
+      final db = await openTestDb(t);
+      final before = await _db(t, () => SkillsRepo(db).all());
+      final old = await _demoBackup(t, DateTime.utc(2026, 11, 1, 10));
+      final oldSummary = inspectBackup(old);
+      final copy = _FakeSafetyCopy(content: old);
+      await _pump(t, db, safetyCopy: copy);
+
+      expect(
+        find.text('1 Kasım 2026 tarihli kopya', skipOffstage: false),
+        findsOneWidget,
+      );
+      await _tap(t, find.text('Geri yüklemeden önceki veriye dön'));
+      expect(
+        find.textContaining(
+          '1 Kasım 2026 tarihli yedek: ${formatCount(oldSummary.skills)} yetenek',
+        ),
+        findsOneWidget,
+      );
+      await t.tap(find.text('Geri yükle'));
+      await t.pumpAndSettle();
+
+      expect(await _db(t, () => SkillsRepo(db).all()), before);
+      // The copy now holds the data from before the undo, not the copy itself.
+      expect(copy.written, hasLength(1));
+      expect(copy.content, isNot(old));
+      expect(find.textContaining('Yedek geri yüklendi.'), findsNothing);
+      expect(find.textContaining('Önceki veriye dönüldü'), findsOneWidget);
+    });
+
+    testWidgets('undo twice brings back the data from before the first', (
+      t,
+    ) async {
+      final db = await openTestDb(t);
+      final emptyCopy = await _emptyBackup(t);
+      final copy = _FakeSafetyCopy(content: emptyCopy);
+      final demoSkills = await _db(t, () => SkillsRepo(db).all());
+      await _pump(t, db, safetyCopy: copy);
+      for (final expectSkills in [false, true]) {
+        await _tap(t, find.text('Geri yüklemeden önceki veriye dön'));
+        await t.tap(find.text('Geri yükle'));
+        await t.pumpAndSettle();
+        final now = await _db(t, () => SkillsRepo(db).all());
+        expect(now.isEmpty, !expectSkills);
+        if (expectSkills) expect(now, demoSkills);
+      }
     });
 
     testWidgets('about says where the data lives', (t) async {

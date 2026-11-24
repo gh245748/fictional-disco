@@ -65,9 +65,19 @@ class SystemShareAdapter implements ShareAdapter {
 }
 
 /// Where the copy of the current data goes before a restore replaces it.
+///
+/// A new copy is staged first and only replaces the old one once the restore
+/// went through, so restoring the copy itself (undo) swaps the two instead
+/// of destroying it.
 abstract class SafetyCopyStore {
-  /// Replaces the previous safety copy with [content]. Throws on failure.
-  Future<void> writeSafetyCopy(String content);
+  /// The committed safety copy, or null when there is none.
+  Future<String?> readSafetyCopy();
+
+  /// Writes [content] beside the committed copy. Throws on failure.
+  Future<void> stageSafetyCopy(String content);
+
+  /// Makes the staged content the safety copy.
+  Future<void> commitStagedSafetyCopy();
 }
 
 /// The one rolling safety copy, in the app documents directory.
@@ -76,14 +86,28 @@ const safetyCopyFileName = 'mesk-geri-yukleme-oncesi.json';
 class SystemSafetyCopyStore implements SafetyCopyStore {
   const SystemSafetyCopyStore();
 
-  @override
-  Future<void> writeSafetyCopy(String content) async {
+  Future<(File target, File staged)> _files() async {
     final dir = await getApplicationDocumentsDirectory();
     final target = File(p.join(dir.path, safetyCopyFileName));
-    // Write beside it first so a failed write keeps the previous copy.
-    final tmp = File('${target.path}.tmp');
-    await tmp.writeAsString(content, flush: true);
-    await tmp.rename(target.path);
+    return (target, File('${target.path}.tmp'));
+  }
+
+  @override
+  Future<String?> readSafetyCopy() async {
+    final (target, _) = await _files();
+    return await target.exists() ? target.readAsString() : null;
+  }
+
+  @override
+  Future<void> stageSafetyCopy(String content) async {
+    final (_, staged) = await _files();
+    await staged.writeAsString(content, flush: true);
+  }
+
+  @override
+  Future<void> commitStagedSafetyCopy() async {
+    final (target, staged) = await _files();
+    await staged.rename(target.path);
   }
 }
 
@@ -123,6 +147,21 @@ final shareAdapterProvider = Provider<ShareAdapter>(
 final safetyCopyStoreProvider = Provider<SafetyCopyStore>(
   (ref) => const SystemSafetyCopyStore(),
 );
+
+/// The text and summary of the safety copy, or null when there is no usable
+/// one. Refresh after a restore.
+final safetyCopyProvider =
+    FutureProvider.autoDispose<({String text, BackupSummary summary})?>((
+      ref,
+    ) async {
+      try {
+        final text = await ref.watch(safetyCopyStoreProvider).readSafetyCopy();
+        if (text == null) return null;
+        return (text: text, summary: inspectBackup(text));
+      } on Object {
+        return null;
+      }
+    });
 
 final backupFilePickerProvider = Provider<BackupFilePicker>(
   (ref) => const SystemBackupFilePicker(),
@@ -189,13 +228,20 @@ class BackupActions {
   Future<RestoreOutcome> restore(String jsonText) async {
     final summary = inspectBackup(jsonText);
     try {
-      await safetyCopy.writeSafetyCopy(await exportBackup(db, clock.nowUtc()));
+      await safetyCopy.stageSafetyCopy(await exportBackup(db, clock.nowUtc()));
     } on Object {
       throw const BackupException(
         'Mevcut verilerinin kopyası alınamadığı için geri yükleme yapılmadı.',
       );
     }
     await importBackup(db, jsonText);
+    try {
+      // The data before this restore becomes the safety copy; restoring the
+      // old copy itself therefore swaps the two.
+      await safetyCopy.commitStagedSafetyCopy();
+    } on Object {
+      // The previous copy stays; the restore itself went through.
+    }
     // The restored file is itself a backup of that date.
     final at = summary.exportedAt;
     var updated = true;
