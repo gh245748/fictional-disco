@@ -1,0 +1,94 @@
+name: iOS
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.1
+          channel: stable
+      - run: flutter pub get
+      - name: Derleme denetimi (imzasız)
+        run: >-
+          flutter build ios --release --no-codesign
+          --dart-define=MESK_BUILD_DATE=$(date -u +%F)
+          --build-number ${{ github.run_number }}
+
+  # GitHub, iş düzeyinde `if: secrets.X` kullanımına izin vermez. Bu iş
+  # anahtarların tanımlı olup olmadığını (değerlerini değil) çıktı olarak verir.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has_asc: ${{ steps.check.outputs.has_asc }}
+    steps:
+      - id: check
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          if [ -n "$ASC_KEY_ID" ]; then
+            echo "has_asc=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_asc=false" >> "$GITHUB_OUTPUT"
+            echo "ASC_KEY_ID tanımlı değil; TestFlight yüklemesi atlanıyor."
+          fi
+
+  testflight:
+    needs: [build, preflight]
+    if: needs.preflight.outputs.has_asc == 'true'
+    runs-on: macos-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.1
+          channel: stable
+      - run: flutter pub get
+      - name: App Store Connect anahtarını yaz
+        run: |
+          printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+      - name: Takım kimliğini yaz
+        run: |
+          # Proje ayarına (DEVELOPMENT_TEAM) ve dışa aktarma ayarına (teamID).
+          echo "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" >> ios/Flutter/Release.xcconfig
+          /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ios/ExportOptions.plist
+      - name: Flutter ayarlarını hazırla
+        run: >-
+          flutter build ios --release --config-only
+          --dart-define=MESK_BUILD_DATE=$(date -u +%F)
+          --build-number ${{ github.run_number }}
+      - name: Arşivle
+        run: >-
+          xcodebuild archive
+          -workspace ios/Runner.xcworkspace
+          -scheme Runner
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -archivePath "$RUNNER_TEMP/Runner.xcarchive"
+          -allowProvisioningUpdates
+          -authenticationKeyPath "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          -authenticationKeyID "$ASC_KEY_ID"
+          -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Dışa aktar ve TestFlight'a yükle
+        run: >-
+          xcodebuild -exportArchive
+          -archivePath "$RUNNER_TEMP/Runner.xcarchive"
+          -exportOptionsPlist ios/ExportOptions.plist
+          -exportPath "$RUNNER_TEMP/export"
+          -allowProvisioningUpdates
+          -authenticationKeyPath "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          -authenticationKeyID "$ASC_KEY_ID"
+          -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Anahtarı sil
+        if: always()
+        run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8
